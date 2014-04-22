@@ -2,11 +2,15 @@ package nachos.threads;
 
 import nachos.machine.*;
 
+import java.util.*;
 /**
  * Uses the hardware timer to provide preemption, and to allow threads to sleep
  * until a certain time.
  */
 public class Alarm {
+
+	private List<AlarmThread> queue;
+
 	/**
 	 * Allocate a new Alarm. Set the machine's timer interrupt handler to this
 	 * alarm's callback.
@@ -15,6 +19,7 @@ public class Alarm {
 	 * <b>Note</b>: Nachos will not function correctly with more than one alarm.
 	 */
 	public Alarm() {
+		queue = Collections.synchronizedList(new ArrayList<AlarmThread>());
 		Machine.timer().setInterruptHandler(new Runnable() {
 			public void run() {
 				timerInterrupt();
@@ -29,7 +34,18 @@ public class Alarm {
 	 * should be run.
 	 */
 	public void timerInterrupt() {
-		KThread.currentThread().yield();
+		Lib.assertTrue(Machine.interrupt().disabled());
+		synchronized(queue){
+    			for(AlarmThread at : queue){
+        			if(Machine.timer().getTime() >= at.time)
+				{
+					at.thread.ready();
+					queue.remove(at);
+				}
+    			}
+		}
+
+		//KThread.currentThread().yield();
 	}
 
 	/**
@@ -45,9 +61,29 @@ public class Alarm {
 	 * @see nachos.machine.Timer#getTime()
 	 */
 	public void waitUntil(long x) {
+		Machine.interrupt().disable();
+		AlarmThread newAlarmThread = new AlarmThread(KThread.currentThread(), Machine.timer().getTime() + x);
+		queue.add(newAlarmThread);
+		KThread.currentThread().sleep();
+		Machine.interrupt().enable();
+
+		// KThread waitingThread = KThread.createIdleThread();
+
 		// for now, cheat just to get something working (busy waiting is bad)
-		long wakeTime = Machine.timer().getTime() + x;
-		while (wakeTime > Machine.timer().getTime())
-			KThread.yield();
+		//long wakeTime = Machine.timer().getTime() + x;
+		//while (wakeTime > Machine.timer().getTime())
+		//	KThread.yield();
+	}
+
+	public class AlarmThread
+	{
+		public KThread thread;
+		public long time;
+		
+		public AlarmThread(KThread thread, long time)
+		{
+			this.thread = thread;
+			this.time = time;
+		} 
 	}
 }

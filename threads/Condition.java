@@ -79,6 +79,8 @@ public class Condition {
 	public void sleep() {
 		Lib.assertTrue(conditionLock.isHeldByCurrentThread());
 
+		// Disle interrupts
+		
 		Semaphore waiter = new Semaphore(0);
 		waitQueue.add(waiter);
 
