@@ -1,6 +1,7 @@
 package nachos.threads;
 
 import nachos.machine.*;
+import java.util.*;
 
 /**
  * A <i>communicator</i> allows threads to synchronously exchange 32-bit
@@ -10,21 +11,24 @@ import nachos.machine.*;
  * be paired off at this point.
  */
 public class Communicator {
-	private Lock lock = new Lock();
-	private int speakersActive = 0;
-	int speakersWait = 0;
-	int listenersActive = 0;
-	int listenersWait = 0;
+	private Lock lock;
+	
 	Condition speakers;
 	Condition listeners;
-	Condition returning;
-
+	
+	boolean isSet;
 	int word;
 	/**
 	 * Allocate a new communicator.
 	 */
 	public Communicator() {
+		lock = new Lock();
+		speakers = new Condition(lock);
+		listeners = new Condition(lock);
+		isSet = false;
+	
 	}
+
 
 	/**
 	 * Wait for a thread to listen through this communicator, and then transfer
@@ -38,36 +42,19 @@ public class Communicator {
 	 */
 	public void speak(int word) {
 		lock.acquire();
-		while(speakersActive > 0)
-		{
-			speakersWait++;
+		while(isSet){
+			listeners.wakeAll();
 			speakers.sleep();
-			speakersWait--;
 		}
-
-		speakersActive++;
 		this.word = word;
-
-		if(listenersActive > 0)
-		{
-			listeners.wake();
-			lock.release();
-			return;
-		} else {
-			if (listenersWait > 0)
-			{
-				returning.sleep();
-				speakersActive--;
-				listenersActive--;
-				if(speakersWait > 0)
-				{
-					speakers.wake();
-				}
-
-				lock.release();
-				return;
-			}
+		this.isSet = true;
+		do{
+			speakers.sleep();
+			listeners.wakeAll(); //initates callback
+		}while(isSet == true){
+			speakers.sleep();
 		}
+		lock.release();
 	}
 
 	/**
@@ -78,38 +65,13 @@ public class Communicator {
 	 */
 	public int listen() {
 		lock.acquire();
-		while(listenersActive > 0)
-		{
-			listenersWait++;
+		while(isSet == false){ // nothing to listen to
+			speakers.wakeAll();
 			listeners.sleep();
-			listenersWait--;
 		}
-
-		listenersActive++;
-		if(speakersActive > 0)
-		{
-			speakers.wake();
-			
-			// Store the word
-			lock.release();
-			return this.word;
-		}else{
-			if(speakersWait> 0)
-			{
-				speakers.wake();
-			}
-			
-			returning.sleep();
-			listenersActive--;
-			speakersActive--;
-			if(listenersWait > 0)
-			{
-				listeners.wake();
-			}
-
-			// Store word
-			lock.release();
-			return this.word;
-		}
+		int word = this.word;
+		this.isSet = false;
+		lock.release();
+		return word;
 	}
 }

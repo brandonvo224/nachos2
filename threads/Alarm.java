@@ -35,16 +35,19 @@ public class Alarm {
 	 */
 	public void timerInterrupt() {
 		Lib.assertTrue(Machine.interrupt().disabled());
-		synchronized(queue){
+List newlist = Collections.synchronizedList(new ArrayList<AlarmThread>());
     			for(AlarmThread at : queue){
         			if(Machine.timer().getTime() >= at.time)
 				{
 					at.thread.ready();
-					queue.remove(at);
+				//	queue.remove(at);
+				}else{
+					newlist.add(at);
 				}
     			}
-		}
-
+			this.queue = newlist;
+		
+		KThread.currentThread().yield();
 		//KThread.currentThread().yield();
 	}
 
@@ -64,7 +67,7 @@ public class Alarm {
 		Machine.interrupt().disable();
 		AlarmThread newAlarmThread = new AlarmThread(KThread.currentThread(), Machine.timer().getTime() + x);
 		queue.add(newAlarmThread);
-		KThread.currentThread().sleep();
+		KThread.sleep();
 		Machine.interrupt().enable();
 
 		// KThread waitingThread = KThread.createIdleThread();
