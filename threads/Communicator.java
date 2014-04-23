@@ -15,8 +15,11 @@ public class Communicator {
 	
 	Condition speakers;
 	Condition listeners;
+	Condition returners;
+
+	int speaking=0;
+	int listening =0;	
 	
-	boolean isSet;
 	int word;
 	/**
 	 * Allocate a new communicator.
@@ -25,7 +28,7 @@ public class Communicator {
 		lock = new Lock();
 		speakers = new Condition(lock);
 		listeners = new Condition(lock);
-		isSet = false;
+		returners = new Condition(lock);
 	
 	}
 
@@ -42,18 +45,13 @@ public class Communicator {
 	 */
 	public void speak(int word) {
 		lock.acquire();
-		while(isSet){
-			listeners.wakeAll();
-			speakers.sleep();
-		}
+		speaking++;
+		listeners.wake();
+		while(listening==0)
+		     speakers.sleep();
 		this.word = word;
-		this.isSet = true;
-		do{
-			speakers.sleep();
-			listeners.wakeAll(); //initates callback
-		}while(isSet == true){
-			speakers.sleep();
-		}
+		returners.wake();
+		speaking--;
 		lock.release();
 	}
 
@@ -65,12 +63,14 @@ public class Communicator {
 	 */
 	public int listen() {
 		lock.acquire();
-		while(isSet == false){ // nothing to listen to
-			speakers.wakeAll();
+		listening++;
+		speakers.wake();
+		while(speaking == 0){ // nothing to listen to
 			listeners.sleep();
 		}
+		returners.sleep();
 		int word = this.word;
-		this.isSet = false;
+		listening--;
 		lock.release();
 		return word;
 	}

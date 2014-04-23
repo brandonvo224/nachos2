@@ -40,7 +40,6 @@ List newlist = Collections.synchronizedList(new ArrayList<AlarmThread>());
         			if(Machine.timer().getTime() >= at.time)
 				{
 					at.thread.ready();
-				//	queue.remove(at);
 				}else{
 					newlist.add(at);
 				}
@@ -48,7 +47,6 @@ List newlist = Collections.synchronizedList(new ArrayList<AlarmThread>());
 			this.queue = newlist;
 		
 		KThread.currentThread().yield();
-		//KThread.currentThread().yield();
 	}
 
 	/**

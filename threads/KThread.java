@@ -423,6 +423,45 @@ public class KThread {
 
 		private int which;
 	}
+	private static class Listener implements Runnable {
+		private int msg;
+		private Communicator commu;
+		private boolean hasRun;
+
+		private Listener(Communicator commu) {
+			this.commu = commu;
+			this.hasRun = false;
+		}
+
+		public void run() {
+			System.out.println("Listener Listening!");
+			msg = commu.listen();
+			System.out.println("Listener Return!");
+			hasRun = true;
+		}
+
+		private int getMessage() {
+			System.out.println("Listener has not finished running --" +hasRun);
+			return msg;
+		}
+	}
+
+	private static class Speaker implements Runnable {
+		private int msg;
+		private Communicator commu;
+
+		private Speaker(int msg, Communicator commu) {
+			this.msg = msg;
+			this.commu = commu;
+		}
+
+		public void run() {
+			System.out.println("Speaker Speaking!");
+			commu.speak(msg);
+			System.out.println("Speaker Return!");
+		}
+	}
+
 
 	/**
 	 * Tests whether this module is working.
