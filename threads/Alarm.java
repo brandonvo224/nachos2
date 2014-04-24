@@ -19,7 +19,7 @@ public class Alarm {
 	 * <b>Note</b>: Nachos will not function correctly with more than one alarm.
 	 */
 	public Alarm() {
-		queue = Collections.synchronizedList(new ArrayList<AlarmThread>());
+		queue = new ArrayList<AlarmThread>();
 		Machine.timer().setInterruptHandler(new Runnable() {
 			public void run() {
 				timerInterrupt();
@@ -35,7 +35,7 @@ public class Alarm {
 	 */
 	public void timerInterrupt() {
 		Lib.assertTrue(Machine.interrupt().disabled());
-List newlist = Collections.synchronizedList(new ArrayList<AlarmThread>());
+		List newlist = new ArrayList<AlarmThread>();
     			for(AlarmThread at : queue){
         			if(Machine.timer().getTime() >= at.time)
 				{
@@ -62,11 +62,14 @@ List newlist = Collections.synchronizedList(new ArrayList<AlarmThread>());
 	 * @see nachos.machine.Timer#getTime()
 	 */
 	public void waitUntil(long x) {
-		Machine.interrupt().disable();
-		AlarmThread newAlarmThread = new AlarmThread(KThread.currentThread(), Machine.timer().getTime() + x);
-		queue.add(newAlarmThread);
-		KThread.sleep();
-		Machine.interrupt().enable();
+		if(x > 0)
+		{
+			Machine.interrupt().disable();
+			AlarmThread newAlarmThread = new AlarmThread(KThread.currentThread(), Machine.timer().getTime() + x);
+			queue.add(newAlarmThread);
+			KThread.sleep();
+			Machine.interrupt().enable();
+		}
 
 		// KThread waitingThread = KThread.createIdleThread();
 

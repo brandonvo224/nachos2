@@ -13,9 +13,9 @@ import java.util.*;
 public class Communicator {
 	private Lock lock;
 	
-	Condition speakers;
-	Condition listeners;
-	Condition returners;
+	Condition2 speakers;
+	Condition2 listeners;
+	Condition2 returners;
 
 	int speaking=0;
 	int listening =0;	
@@ -26,9 +26,9 @@ public class Communicator {
 	 */
 	public Communicator() {
 		lock = new Lock();
-		speakers = new Condition(lock);
-		listeners = new Condition(lock);
-		returners = new Condition(lock);
+		speakers = new Condition2(lock);
+		listeners = new Condition2(lock);
+		returners = new Condition2(lock);
 	
 	}
 
