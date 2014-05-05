@@ -3,9 +3,9 @@ package nachos.userprog;
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
-
+import java.util.*;
 import java.io.EOFException;
-
+import nachos.threads.ThreadedKernal;
 /**
  * Encapsulates the state of a user process that is not contained in its user
  * thread (or threads). This includes its address translation state, a file
@@ -27,6 +27,9 @@ public class UserProcess {
 		pageTable = new TranslationEntry[numPhysPages];
 		for (int i = 0; i < numPhysPages; i++)
 			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+	
+		fileDescriptors.add( UserKernel.console.openForReading());
+		fileDescriptors.add( UserKernel.console.openForWriting());
 	}
 
 	/**
@@ -111,6 +114,7 @@ public class UserProcess {
 	public int readVirtualMemory(int vaddr, byte[] data) {
 		return readVirtualMemory(vaddr, data, 0, data.length);
 	}
+
 
 	/**
 	 * Transfer data from this process's virtual memory to the specified array.
@@ -267,6 +271,7 @@ public class UserProcess {
 			Lib.assertTrue(writeVirtualMemory(stringOffset, new byte[] { 0 }) == 1);
 			stringOffset += 1;
 		}
+		
 
 		return true;
 	}
@@ -343,6 +348,135 @@ public class UserProcess {
 		return 0;
 	}
 
+	private int accessFile(int name, boolean createIfNotFound){
+		try{
+			String filename = readVirtualMemoryString(name, 256);
+		/* Filename not found. */
+			if(filename == null || filename.length() == 0){
+				return -1;
+			}
+			OpenFile file = UserKernal.fileSystem.open(filename, createIfNotFound);
+			if(file != null){
+				fileDescriptors.add(file);
+				return fileDescriptors.size()-1;
+			}
+			/* File not found */
+			return -2;
+		}catch(Exception e){
+			/* I dont know */
+			return -3;
+		}
+	}
+	
+	private int handleCreate(int name){
+		return accessFile(name, true);
+	}
+	
+	private int handleOpen(int name){
+		return accessFile(name, false);
+	}
+
+	private int handleRead(int fileDescriptor, int buffer, int bytesToRead){
+		if(fileDescriptor < 0 || fileDescriptor >= fileDescriptors.size()){
+			return -1;	
+			/* invalid index*/	
+		}
+		OpenFile file = fileDescriptors.get(fileDescriptor);
+
+		if(file == null){
+			/* file is removed from table*/
+			return -2;
+		}
+
+		byte[] writeSpace = new byte[bytesToRead];
+		int readCount = file.read(writeSpace, 0, bytesToRead);
+		if(readCount <= 0){
+			return -3;
+			/* file is empty or something weird happened*/
+		}
+		return writeVirtualMemory(buffer, writeSpace, 0, readCount);
+		
+		
+	}
+
+	private int handleWrite(int fileDescriptor, int buffer, int bytesToWrite){
+		byte[] readSpace = new byte[bytesToWrite];
+		int bytesRead = readVirtualMemory(buffer, readSpace);
+		if(bytesRead <= 0){
+			return -3;
+			/*	buffer space is empty*/
+		}
+		if(fileDescriptor < 0 || fileDescriptor >= fileDescriptors.size()){
+			return -1;
+			/* invalid index*/
+		}
+		OpenFile file = fileDescriptors.get(fileDescriptor);
+		if(file == null){
+			return -2;
+			/* file is removed from table*/
+		}
+		int result = file.write(readSpace, 0, bytesToWrite);
+		if(result == bytesToWrite){
+			return result;	
+		}else{
+			return -4;
+			/* not sure what the problem would be. probably write issues*/
+		}
+	}
+
+	private int handleClose(int fileDescriptor){
+		if(fileDescriptor < 0 || fileDescriptor >= fileDescriptors.size()){
+			return -1;
+			/* invalid index*/
+		}
+		OpenFile file = fileDescriptors.get(fileDescriptor);
+		if(file == null){
+			return -2;
+			/* already closed*/
+		}
+		try{
+			file.close();
+		}catch(Exception e){
+			return -3;
+			/* file is not allowed to close */
+		}
+		fileDescriptors.set(fileDescriptor, null);
+		return 0;
+	}
+	
+	private int handleUnlink(int name){
+		try{
+			String filename = readVirtualMemoryString(name, 256);
+			if(filename == null || filename.length() == 0){
+				return -1;
+			}
+			boolean status = ThreadedKernal.fileSystem.remove(filename);
+			if(status){
+				return 0;
+			}else{
+				return -2;
+				/* no permission to remove*/
+			}
+		}catch(Exception e){
+			return -3;
+			/**/
+		}
+		return 0;
+	}
+
+	private int handleExit(int status){
+		return 0;
+	}
+
+	private int handleExec(int file, int argc, int argv){
+		return 0;
+	}
+
+	private int handleJoin(int processID, int status){
+		return 0;
+	}
+
+		
 	private static final int syscallHalt = 0, syscallExit = 1, syscallExec = 2,
 			syscallJoin = 3, syscallCreate = 4, syscallOpen = 5,
 			syscallRead = 6, syscallWrite = 7, syscallClose = 8,
@@ -413,7 +547,22 @@ public class UserProcess {
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();
-
+		case syscallExec:
+	    	     return handleExec(a0,a1,a2);
+		case syscallJoin:
+	    	     return handleJoin(a0,a1);
+		case syscallCreate:
+	    	     return handleCreate(a0);
+		case syscallOpen:
+	    	     return handleOpen(a0);
+		case syscallRead:
+	    	     return handleRead(a0,a1,a2);
+		case syscallWrite:
+	    	     return handleWrite(a0,a1,a2);
+		case syscallClose:
+	    	     return handleClose(a0);
+		case syscallUnlink:
+    		     return handleUnlink(a0);
 		default:
 			Lib.debug(dbgProcess, "Unknown syscall " + syscall);
 			Lib.assertNotReached("Unknown system call!");
@@ -468,4 +617,7 @@ public class UserProcess {
 	private static final int pageSize = Processor.pageSize;
 
 	private static final char dbgProcess = 'a';
+	
+	List<OpenFile> fileDescriptors = new Vector<OpenFile>();
+
 }
