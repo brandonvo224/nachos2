@@ -113,15 +113,6 @@ public class UserKernel extends ThreadedKernel {
 		super.terminate();
 	}
 
-	public void free(int page){
-		pagesLock.acquire();
-		if(pages.contains(page) == false){
-			pages.add(page);
-		}
-		pagesLock.release();
-		
-	}
-
 
 
 
