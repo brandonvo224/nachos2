@@ -24,9 +24,7 @@ public class UserProcess {
 	 */
 	public UserProcess() {
 		int numPhysPages = Machine.processor().getNumPhysPages();
-		pageTable = new TranslationEntry[numPhysPages];
-		for (int i = 0; i < numPhysPages; i++)
-			pageTable[i] = new TranslationEntry(i, i, true, false, false, false);
+
 		pagesLock = new Lock();	
 		fileDescriptors.add( UserKernel.console.openForReading());
 		fileDescriptors.add( UserKernel.console.openForWriting());
@@ -304,11 +302,27 @@ public class UserProcess {
 	 * @return <tt>true</tt> if the sections were successfully loaded.
 	 */
 	protected boolean loadSections() {
+		// allocate sections
 		if (numPages > Machine.processor().getNumPhysPages()) {
 			coff.close();
 			Lib.debug(dbgProcess, "\tinsufficient physical memory");
 			return false;
 		}
+
+		pageTable = new TranslationEntry[numPages];
+		int[] allocatedPages = UserKernel.allocatePages(numPages);
+		if(allocatedPages == null){
+			return false;
+		}
+		for(int i = 0; i < pageTable.length; i++){
+			pageTable[i] = new TranslationEntry(i, allocatedPages[i], true, false,false,false);
+		}
+
+		if (numPages > Machine.processor().getNumPhysPages()) {
+            		coff.close();
+            		error( "\tinsufficient physical memory");
+            		return false;
+        	}
 
 		// load sections
 		for (int s = 0; s < coff.getNumSections(); s++) {
@@ -339,6 +353,7 @@ public class UserProcess {
 	protected void unloadSections() {
 		for(int i =0; i < pages.length; i++){
 			UserKernel.free(pages[i].ppn);
+			
 		}
 	}
 

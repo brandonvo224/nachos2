@@ -119,7 +119,20 @@ public class UserKernel extends ThreadedKernel {
 			pages.add(page);
 		}
 		pagesLock.release();
-		
+	}
+
+	public int[] allocatePages(int amnt){
+		pagesLock.acquire();
+		if(pages.size() < amnt){
+			pagesLock.release();
+			return null;
+		}
+		int[]  alloPages = new int[amnt];
+		for(int i = 0; i < amnt; i++){
+			alloPages[i] = (pages.remove());
+		}
+		pagesLock.release();
+		return alloPages;
 	}
 
 
