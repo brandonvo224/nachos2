@@ -5,7 +5,8 @@ import nachos.threads.*;
 import nachos.userprog.*;
 import java.util.*;
 import java.io.EOFException;
-import nachos.threads.ThreadedKernal;
+import nachos.threads.ThreadedKernel;
+import java.util.List;
 /**
  * Encapsulates the state of a user process that is not contained in its user
  * thread (or threads). This includes its address translation state, a file
@@ -134,11 +135,11 @@ public class UserProcess {
 		
 		byte[] memory = Machine.processor().getMemory();
 		int pageSTART = Processor.pageFromAddress(vaddr);
-		int offset = Processor.offsetFromAddress(vaddr);
-		if(pages == null){
+		int offsetFromAddress = Processor.offsetFromAddress(vaddr);
+		if(pageTable == null){
 			return 0;
 		}
-		if(pageSTART >= pages.length){
+		if(pageSTART >= pageTable.length){
 			return 0;
 		}
 		if(pageTable[pageSTART] == null){
@@ -147,10 +148,11 @@ public class UserProcess {
 		pagesLock.acquire();
 		int ppn = pageTable[pageSTART].ppn;
 		/* translation of virtual to physical is here */
-		int paddr  = Processor.makeAddress(ppn, offset);
+		int paddr  = Processor.makeAddress(ppn, offsetFromAddress);
 		int amount = Math.min(length, memory.length - paddr);
 		System.arraycopy(memory, paddr, data, offset, amount);
 		pagesLock.release();
+		return amount;
 	}    
 
 
@@ -186,11 +188,11 @@ public class UserProcess {
 
 		byte[] memory = Machine.processor().getMemory();
 		int pageSTART = Processor.pageFromAddress(vaddr);
-		int offset = Processor.offsetFromAddress(vaddr);
+		int offsetFromAddress = Processor.offsetFromAddress(vaddr);
 		if(pageTable == null){
 			return 0;
 		}
-		if(pageSTART >= pages.length){
+		if(pageSTART >= pageTable.length){
 			return 0;
 		}
 		if(pageTable[pageSTART] == null){
@@ -198,7 +200,7 @@ public class UserProcess {
 		}
 		pagesLock.acquire();
 		int ppn = pageTable[pageSTART].ppn;
-		int paddr = Processor.makeAddress(ppn, offset);
+		int paddr = Processor.makeAddress(ppn, offsetFromAddress);
 	
 		int amount = Math.min(length, memory.length - vaddr);
 		System.arraycopy(data, offset, memory, paddr, amount);
@@ -320,7 +322,7 @@ public class UserProcess {
 
 		if (numPages > Machine.processor().getNumPhysPages()) {
             		coff.close();
-            		error( "\tinsufficient physical memory");
+            		
             		return false;
         	}
 
@@ -337,10 +339,10 @@ public class UserProcess {
 					/* Not sure why this would happen, but I don't want a null pointer over here. */				
 					return false;
 				}
-				if(section.isReadyOnly()){
-					pages[vpn].readOnly = true;				
+				if(section.isReadOnly()){
+					pageTable[vpn].readOnly = true;				
 				}
-				section.loadPage(i, pages[vpn].ppn);
+				section.loadPage(i, pageTable[vpn].ppn);
 			}
 		}
 
@@ -351,8 +353,8 @@ public class UserProcess {
 	 * Release any resources allocated by <tt>loadSections()</tt>.
 	 */
 	protected void unloadSections() {
-		for(int i =0; i < pages.length; i++){
-			UserKernel.free(pages[i].ppn);
+		for(int i =0; i < pageTable.length; i++){
+			UserKernel.free(pageTable[i].ppn);
 			
 		}
 	}
@@ -398,7 +400,7 @@ public class UserProcess {
 			if(filename == null || filename.length() == 0){
 				return -1;
 			}
-			OpenFile file = UserKernal.fileSystem.open(filename, createIfNotFound);
+			OpenFile file = UserKernel.fileSystem.open(filename, createIfNotFound);
 			if(file != null){
 				fileDescriptors.add(file);
 				return fileDescriptors.size()-1;
@@ -493,7 +495,7 @@ public class UserProcess {
 			if(filename == null || filename.length() == 0){
 				return -1;
 			}
-			boolean status = ThreadedKernal.fileSystem.remove(filename);
+			boolean status = ThreadedKernel.fileSystem.remove(filename);
 			if(status){
 				return 0;
 			}else{
@@ -504,7 +506,7 @@ public class UserProcess {
 			return -3;
 			/**/
 		}
-		return 0;
+	
 	}
 
 	private int handleExit(int status){
