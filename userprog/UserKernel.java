@@ -3,6 +3,7 @@ package nachos.userprog;
 import nachos.machine.*;
 import nachos.threads.*;
 import nachos.userprog.*;
+import java.util.*;
 
 /**
  * A kernel that can support multiple user processes.
@@ -113,7 +114,7 @@ public class UserKernel extends ThreadedKernel {
 		super.terminate();
 	}
 
-	public void free(int page){
+	public static void free(int page){
 		pagesLock.acquire();
 		if(pages.contains(page) == false){
 			pages.add(page);
@@ -121,7 +122,7 @@ public class UserKernel extends ThreadedKernel {
 		pagesLock.release();
 	}
 
-	public int[] allocatePages(int amnt){
+	public static int[] allocatePages(int amnt){
 		pagesLock.acquire();
 		if(pages.size() < amnt){
 			pagesLock.release();
@@ -129,7 +130,7 @@ public class UserKernel extends ThreadedKernel {
 		}
 		int[]  alloPages = new int[amnt];
 		for(int i = 0; i < amnt; i++){
-			alloPages[i] = (pages.remove());
+			alloPages[i] = (pages.remove(pages.size()-1));
 		}
 		pagesLock.release();
 		return alloPages;
@@ -144,5 +145,6 @@ public class UserKernel extends ThreadedKernel {
 	// dummy variables to make javac smarter
 	private static Coff dummy1 = null;
 	private static Lock pagesLock;
-	private static List<Integer> pages;
+	public static List<Integer> pages;
+
 }
