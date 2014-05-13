@@ -7,6 +7,7 @@ import java.util.*;
 import java.io.EOFException;
 import nachos.threads.ThreadedKernel;
 import java.util.List;
+
 /**
  * Encapsulates the state of a user process that is not contained in its user
  * thread (or threads). This includes its address translation state, a file
@@ -29,6 +30,15 @@ public class UserProcess {
 		pagesLock = new Lock();	
 		fileDescriptors.add( UserKernel.console.openForReading());
 		fileDescriptors.add( UserKernel.console.openForWriting());
+		
+		nextIDMutex.acquire();
+		this.processID = nextProcessIDAssignment;
+		nextProcessIDAssignment++;
+		nextIDMutex.release();
+
+		numProcessesMutex.acquire();
+		numProcesses++;
+		numProcessesMutex.release();
 	}
 
 	/**
@@ -150,7 +160,7 @@ public class UserProcess {
 		/* translation of virtual to physical is here */
 		int paddr  = Processor.makeAddress(ppn, offsetFromAddress);
 		int amount = Math.min(length, memory.length - paddr);
-		System.arraycopy(memory, paddr, data, offset, amount);
+		System.arraycopy(memory, paddr*pageSize + offsetFromAddress, data, offset, amount);
 		pagesLock.release();
 		return amount;
 	}    
@@ -203,7 +213,7 @@ public class UserProcess {
 		int paddr = Processor.makeAddress(ppn, offsetFromAddress);
 	
 		int amount = Math.min(length, memory.length - vaddr);
-		System.arraycopy(data, offset, memory, paddr, amount);
+		System.arraycopy(data, offsetFromAddress + ppn*pageSize, memory, paddr, amount);
 		pagesLock.release();
 		return amount;
 	}
@@ -322,7 +332,7 @@ public class UserProcess {
 
 		if (numPages > Machine.processor().getNumPhysPages()) {
             		coff.close();
-            		
+            		// error( "\tinsufficient physical memory");
             		return false;
         	}
 
@@ -342,10 +352,9 @@ public class UserProcess {
 				if(section.isReadOnly()){
 					pageTable[vpn].readOnly = true;				
 				}
-				section.loadPage(i, pageTable[vpn].ppn);
+				section.loadPage(i, pageTable[vpn].ppn);			
 			}
 		}
-
 		return true;
 	}
 
@@ -355,7 +364,6 @@ public class UserProcess {
 	protected void unloadSections() {
 		for(int i =0; i < pageTable.length; i++){
 			UserKernel.free(pageTable[i].ppn);
-			
 		}
 	}
 
@@ -506,19 +514,160 @@ public class UserProcess {
 			return -3;
 			/**/
 		}
-	
 	}
 
+	// Handle process exiting.
 	private int handleExit(int status){
-		return 0;
+		int returnCode = 0;
+
+		// Close all files used
+		for(int i = 0; i < fileDescriptors.size(); i++)
+		{
+			if(fileDescriptors.get(i) != null)
+			{
+				returnCode = this.handleClose(i);
+				if (returnCode != 0)
+				{
+					return -1; // Unable to close file
+				}
+			}
+		}
+
+		// wake the parent process who called join() and remove it from the list of child processes
+		if(parentProcess != null)
+		{
+			this.parentProcess.handleChildExiting(this.processID);
+		}
+
+		// Release memory (coff sections)
+		this.unloadSections();
+
+		// Set all child processes' parents to null.
+		for(int i = 0; i < this.childProcesses.size(); i++)
+		{
+			this.childProcesses.get(i).setParentProcess(null);
+		}		
+
+		// Decrement the number of processes.
+		numProcessesMutex.acquire();
+		numProcesses--;
+		if (numProcesses <= 0)
+		{
+			Kernel.kernel.terminate();
+		}
+
+		numProcessesMutex.release();
+		return status;
+	}
+
+	public void setParentProcess(UserProcess process)
+	{
+		this.parentProcess = process;
+	}
+
+	public void handleChildExiting(int callingProcessID)
+	{
+		// Wake parent if waiting for child.
+		if(this.waitingForProcessID == callingProcessID)
+		{
+			this.joinWaiter.wake();
+			this.waitingForProcessID = -1;
+		}
+
+		// Remove child from list of child processes.
+		for(int i = 0; i < this.childProcesses.size(); i++)
+		{
+			if(this.childProcesses.get(i).getProcessID() == callingProcessID)
+			{
+				this.childProcesses.remove(i);
+				break;
+			}
+		}
+	}
+
+	public int getWaitingForProcessID()
+	{
+		return this.waitingForProcessID;
 	}
 
 	private int handleExec(int file, int argc, int argv){
-		return 0;
+		// Get the executable name (readVirtualMemoryString)
+
+		if(file < 0 || argc < 0)
+		{
+			return -1; // Invalid parameters.
+		}
+
+		String fileName = this.readVirtualMemoryString(file, 1000);
+		if(fileName != null && fileName.endsWith(".coff"))
+		{
+			// Get all arguments
+			List<String> arguments = new ArrayList<String>();
+			int vaddrOffset = argv;
+			for(int i = 0; i < argc; i++)
+			{
+				byte[] data = new byte[Integer.SIZE];
+				int numTransferredBytes = this.readVirtualMemory(vaddrOffset, data);
+				if (data.length != numTransferredBytes) 
+				{
+					return -2; // Not equal number of btyes transferred.
+				}
+				
+				int argvPtr = Lib.bytesToInt(data, 0);
+				String argument = null;
+				if(argvPtr != 0)
+				{
+					argument = this.readVirtualMemoryString(argvPtr, 1000);
+					if (argument == null)
+					{
+						return -3; // invalid argument
+					}
+
+					arguments.add(argument);
+					vaddrOffset += Integer.SIZE;
+				}
+			}
+
+			// Create a child process
+			UserProcess newChildProcess = newUserProcess();
+			boolean didExecute = newChildProcess.execute(fileName, (String[])arguments.toArray());
+			newChildProcess.setParentProcess(this);
+			childProcesses.add(newChildProcess);
+			if(didExecute)
+			{
+				return newChildProcess.getProcessID();
+			}
+			else
+			{
+				return -4; // Did not execute.
+			}
+		}
+		else
+		{
+			return -5; // Invalid file name.
+		}
+
 	}
 
 	private int handleJoin(int processID, int status){
-		return 0;
+		// Search through all the child processes.
+		for(int i = 0; i < childProcesses.size(); i++)
+		{
+			if (childProcesses.get(i).getProcessID() == processID)
+			{
+				// Put this process to sleep until that child process is finished.
+				this.waitingForProcessID = processID;
+				joinWaiter.sleep();
+				return 0;
+			}
+		}
+
+		return -1; // The processID is not a child process.
+	}
+
+	public int getProcessID()
+	{
+		return this.processID;
 	}
 
 		
@@ -637,6 +786,7 @@ public class UserProcess {
 			break;
 
 		default:
+			this.handleExit(-1);
 			Lib.debug(dbgProcess, "Unexpected exception: "
 					+ Processor.exceptionNames[cause]);
 			Lib.assertNotReached("Unexpected exception");
@@ -656,14 +806,21 @@ public class UserProcess {
 	protected final int stackPages = 8;
 
 	private int initialPC, initialSP;
-
 	private int argc, argv;
 
 	private static final int pageSize = Processor.pageSize;
-
 	private static final char dbgProcess = 'a';
-	
-	List<OpenFile> fileDescriptors = new Vector<OpenFile>();
 
-	private Lock pagesLock;
+	private List<OpenFile> fileDescriptors = new Vector<OpenFile>();
+	private Lock pagesLock;	
+	private List<UserProcess> childProcesses = new ArrayList<UserProcess>();
+	private UserProcess parentProcess = null;
+	private int processID = 0;
+	private int waitingForProcessID = -1;
+	private Condition joinWaiter = new Condition(new Lock());
+
+	private static int nextProcessIDAssignment = 0;
+	private static Lock nextIDMutex = new Lock();
+	private static int numProcesses = 0;
+	private static Lock numProcessesMutex = new Lock();
 }
