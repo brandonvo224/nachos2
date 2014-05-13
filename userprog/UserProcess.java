@@ -155,13 +155,13 @@ public class UserProcess {
 		if(pageTable[pageSTART] == null){
 			return 0;
 		}
-		pagesLock.acquire();
+		//pagesLock.acquire();
 		int ppn = pageTable[pageSTART].ppn;
 		/* translation of virtual to physical is here */
 		int paddr  = Processor.makeAddress(ppn, offsetFromAddress);
 		int amount = Math.min(length, memory.length - paddr);
 		System.arraycopy(memory, paddr*pageSize + offsetFromAddress, data, offset, amount);
-		pagesLock.release();
+		//pagesLock.release();
 		return amount;
 	}    
 
@@ -208,13 +208,13 @@ public class UserProcess {
 		if(pageTable[pageSTART] == null){
 			return 0;
 		}
-		pagesLock.acquire();
+	//	pagesLock.acquire();
 		int ppn = pageTable[pageSTART].ppn;
 		int paddr = Processor.makeAddress(ppn, offsetFromAddress);
 	
 		int amount = Math.min(length, memory.length - vaddr);
 		System.arraycopy(data, offsetFromAddress + ppn*pageSize, memory, paddr, amount);
-		pagesLock.release();
+	//	pagesLock.release();
 		return amount;
 	}
 
