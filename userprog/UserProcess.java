@@ -160,7 +160,7 @@ public class UserProcess {
 		/* translation of virtual to physical is here */
 		int paddr  = Processor.makeAddress(ppn, offsetFromAddress);
 		int amount = Math.min(length, memory.length - paddr);
-		System.arraycopy(memory, paddr*pageSize + offsetFromAddress, data, offset, amount);
+		System.arraycopy(memory, paddr, data, offset, amount);
 		//pagesLock.release();
 		return amount;
 	}    
@@ -213,7 +213,7 @@ public class UserProcess {
 		int paddr = Processor.makeAddress(ppn, offsetFromAddress);
 	
 		int amount = Math.min(length, memory.length - vaddr);
-		System.arraycopy(data, offsetFromAddress + ppn*pageSize, memory, paddr, amount);
+		System.arraycopy(data, offset, memory, paddr, amount);
 	//	pagesLock.release();
 		return amount;
 	}
