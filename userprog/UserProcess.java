@@ -36,6 +36,9 @@ public class UserProcess {
 		nextProcessIDAssignment++;
 		nextIDMutex.release();
 
+		joinLock = new Lock();
+		joinWaiter = new Condition(joinLock);
+
 		numProcessesMutex.acquire();
 		numProcesses++;
 		numProcessesMutex.release();
@@ -555,8 +558,11 @@ public class UserProcess {
 		{
 			Kernel.kernel.terminate();
 		}
-
+		this.hasReturned = true;
 		numProcessesMutex.release();
+		this.joinLock.acquire();
+		this.joinWaiter.wake();
+		this.joinLock.release();
 		return status;
 	}
 
@@ -598,7 +604,7 @@ public class UserProcess {
 			return -1; // Invalid parameters.
 		}
 
-		String fileName = this.readVirtualMemoryString(file, 1000);
+		String fileName = this.readVirtualMemoryString(file, 256);
 		if(fileName != null && fileName.endsWith(".coff"))
 		{
 			// Get all arguments
@@ -606,7 +612,7 @@ public class UserProcess {
 			int vaddrOffset = argv;
 			for(int i = 0; i < argc; i++)
 			{
-				byte[] data = new byte[Integer.SIZE];
+				byte[] data = new byte[4];
 				int numTransferredBytes = this.readVirtualMemory(vaddrOffset, data);
 				if (data.length != numTransferredBytes) 
 				{
@@ -617,20 +623,20 @@ public class UserProcess {
 				String argument = null;
 				if(argvPtr != 0)
 				{
-					argument = this.readVirtualMemoryString(argvPtr, 1000);
+					argument = this.readVirtualMemoryString(argvPtr, 256);
 					if (argument == null)
 					{
 						return -3; // invalid argument
 					}
 
 					arguments.add(argument);
-					vaddrOffset += Integer.SIZE;
+					vaddrOffset += 4;
 				}
 			}
 
 			// Create a child process
 			UserProcess newChildProcess = newUserProcess();
-			boolean didExecute = newChildProcess.execute(fileName, (String[])arguments.toArray());
+			boolean didExecute = newChildProcess.execute(fileName, arguments.toArray(new String[arguments.size()]));
 			newChildProcess.setParentProcess(this);
 			childProcesses.add(newChildProcess);
 			if(didExecute)
@@ -651,17 +657,27 @@ public class UserProcess {
 
 	private int handleJoin(int processID, int status){
 		// Search through all the child processes.
+		int location = -1;
 		for(int i = 0; i < childProcesses.size(); i++)
 		{
 			if (childProcesses.get(i).getProcessID() == processID)
 			{
-				// Put this process to sleep until that child process is finished.
-				this.waitingForProcessID = processID;
-				joinWaiter.sleep();
+				location = i;
+				break;
+			}
+		}
+		
+		if(location == -1){
+			return -1;		
+		}else{
+			UserProcess child = childProcesses.get(location);
+			child.joinLock.acquire();
+			if(child.hasReturned == false){
+				child.joinWaiter.sleep();
+				child.joinLock.release();
 				return 0;
 			}
 		}
-
 		return -1; // The processID is not a child process.
 	}
 
@@ -743,6 +759,8 @@ public class UserProcess {
 			return handleHalt();
 		case syscallExec:
 	    	     return handleExec(a0,a1,a2);
+		case syscallExit:
+		     return handleExit(a0);
 		case syscallJoin:
 	    	     return handleJoin(a0,a1);
 		case syscallCreate:
@@ -817,7 +835,9 @@ public class UserProcess {
 	private UserProcess parentProcess = null;
 	private int processID = 0;
 	private int waitingForProcessID = -1;
-	private Condition joinWaiter = new Condition(new Lock());
+	private Lock joinLock;
+	public Condition joinWaiter;
+	public boolean hasReturned = false;
 
 	private static int nextProcessIDAssignment = 0;
 	private static Lock nextIDMutex = new Lock();
