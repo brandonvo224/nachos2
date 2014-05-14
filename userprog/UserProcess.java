@@ -536,12 +536,6 @@ public class UserProcess {
 			}
 		}
 
-		// wake the parent process who called join() and remove it from the list of child processes
-		if(parentProcess != null)
-		{
-			this.parentProcess.handleChildExiting(this.processID);
-		}
-
 		// Release memory (coff sections)
 		this.unloadSections();
 

@@ -670,9 +670,8 @@ public class UserProcess {
 		if(location == -1){
 			return -1;		
 		}else{
-			
 			UserProcess child = childProcesses.get(location);
-child.joinLock.acquire();
+			child.joinLock.acquire();
 			if(child.hasReturned == false){
 				child.joinWaiter.sleep();
 				child.joinLock.release();
