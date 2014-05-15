@@ -110,9 +110,11 @@ public class UserProcess {
 		int bytesRead = readVirtualMemory(vaddr, bytes);
 		
 		for (int length = 0; length < bytesRead; length++) {
-			System.out.println(length + ", " + bytes[length]);
-			if (bytes[length] == 0)
-				return new String(bytes, 0, length);
+			if (bytes[length] == 0){
+				String s = new String(bytes, 0, length);
+				System.out.println(s);
+				return s;
+			}
 		}
 		System.out.println(new String(bytes, 0, bytesRead));
 
