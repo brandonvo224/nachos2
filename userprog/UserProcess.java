@@ -65,7 +65,7 @@ public class UserProcess {
 	 */
 	public boolean execute(String name, String[] args) {
 		boolean loaded = load(name, args);
-		System.out.println("loaded check = " + loaded);
+		//System.out.println("Process " + this.processID + " loaded check = " + loaded);
 		if (loaded == false)
 			return false;
 
@@ -112,11 +112,11 @@ public class UserProcess {
 		for (int length = 0; length < bytesRead; length++) {
 			if (bytes[length] == 0){
 				String s = new String(bytes, 0, length);
-				System.out.println(s);
+				// System.out.println(s);
 				return s;
 			}
 		}
-		System.out.println(new String(bytes, 0, bytesRead));
+		// System.out.println(new String(bytes, 0, bytesRead));
 
 		return null;
 	}
@@ -151,7 +151,7 @@ public class UserProcess {
 	public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
 		Lib.assertTrue(offset >= 0 && length >= 0
 				&& offset + length <= data.length);
-		System.out.println("INSIDE READVIRTUALMEMORY to READ ");
+		// System.out.println("INSIDE READVIRTUALMEMORY to READ ");
 		
 		byte[] memory = Machine.processor().getMemory();
 		int pageSTART = Processor.pageFromAddress(vaddr);
@@ -165,15 +165,15 @@ public class UserProcess {
 		if(pageTable[pageSTART] == null){
 			return 0;
 		}
-		System.out.println("PAGES ARE " + pageSTART);
+		// System.out.println("PAGES ARE " + pageSTART);
 		//pagesLock.acquire();
 		int ppn = pageTable[pageSTART].ppn;
 		/* translation of virtual to physical is here */
 		int paddr  = Processor.makeAddress(ppn, offsetFromAddress);
-		System.out.println("PHYS ADDRESS IS AT " + paddr);
+		// System.out.println("PHYS ADDRESS IS AT " + paddr);
 		int amount = Math.min(length, memory.length - paddr);
 		System.arraycopy(memory, paddr, data, offset, amount);
-		System.out.println(data + " IS WHAT I READ");
+		// System.out.println(data + " IS WHAT I READ");
 		return amount;
 	}    
 
@@ -244,7 +244,7 @@ public class UserProcess {
 		Lib.debug(dbgProcess, "UserProcess.load(\"" + name + "\")");
 		OpenFile executable = ThreadedKernel.fileSystem.open(name, false);
 		if (executable == null) {
-			System.out.println("unable to load");
+			// System.out.println("unable to load");
 			Lib.debug(dbgProcess, "\topen failed");
 			return false;
 		}
@@ -265,7 +265,7 @@ public class UserProcess {
 			if (section.getFirstVPN() != numPages) {
 				coff.close();
 				Lib.debug(dbgProcess, "\tfragmented executable");
-				System.out.println("fragmented executabe");
+				// System.out.println("fragmented executabe");
 				return false;
 			}
 			numPages += section.getLength();
@@ -281,7 +281,7 @@ public class UserProcess {
 		}
 		if (argsSize > pageSize) {
 			coff.close();
-			System.out.println("args > pageSize");
+			//System.out.println("args > pageSize");
 			Lib.debug(dbgProcess, "\targuments too long");
 			return false;
 		}
@@ -297,7 +297,7 @@ public class UserProcess {
 		numPages++;
 
 		if (!loadSections()){
-			System.out.println("unable to load sections");	
+			// System.out.println("unable to load sections");	
 			return false;
 		}
 		// store arguments in last page
@@ -431,7 +431,7 @@ public class UserProcess {
 				return fileDescriptors.size()-1;
 			}
 			/* File not found */
-			System.out.println("RETURNING -2 LOL");
+			// System.out.println("RETURNING -2 LOL");
 			return -1;
 		}catch(Exception e){
 			/* I dont know */
@@ -474,20 +474,20 @@ public class UserProcess {
 		byte[] readSpace = new byte[bytesToWrite];
 		int bytesRead = readVirtualMemory(buffer, readSpace);
 		if(bytesRead <= 0){
-			System.out.println("buffer space is emtpy");
+			// System.out.println("buffer space is emtpy");
 			return -1;
 			
 			/*	buffer space is empty*/
 		}
 		if(fileDescriptor < 0 || fileDescriptor >= fileDescriptors.size()){
-			System.out.println("invalid index " + fileDescriptor + " , " + fileDescriptors.size());
+			// System.out.println("invalid index " + fileDescriptor + " , " + fileDescriptors.size());
 			return -1;
 
 			/* invalid index*/
 		}
 		OpenFile file = fileDescriptors.get(fileDescriptor);
 		if(file == null){
-			System.out.println("file is removed from table");
+			// System.out.println("file is removed from table");
 			return -1;
 			/* file is removed from table*/
 		}
@@ -496,7 +496,7 @@ public class UserProcess {
 			//System.out.println("RETURNING " + result);
 			return result;	
 		}else{
-			System.out.println("write issues " + result + ", " + bytesToWrite);
+			// System.out.println("write issues " + result + ", " + bytesToWrite);
 			return -1;
 			/* not sure what the problem would be. probably write issues*/
 		}
@@ -504,13 +504,13 @@ public class UserProcess {
 
 	private int handleClose(int fileDescriptor){
 		if(fileDescriptor < 0 || fileDescriptor >= fileDescriptors.size()){
-			System.out.println("invalid index for " + fileDescriptor);
+			// System.out.println("invalid index for " + fileDescriptor);
 			return -1;
 			/* invalid index*/
 		}
 		OpenFile file = fileDescriptors.get(fileDescriptor);
 		if(file == null){
-System.out.println("already closed");
+			// System.out.println("already closed");
 			return -1;
 			/* already closed*/
 		}
@@ -546,6 +546,7 @@ System.out.println("already closed");
 	// Handle process exiting.
 	private int handleExit(int status){
 		int returnCode = 0;
+		// System.out.println("Process " + this.processID + " is attempting to exit.");
 
 		// Close all files used
 		for(int i = 0; i < fileDescriptors.size(); i++)
@@ -576,6 +577,8 @@ System.out.println("already closed");
 		{
 			Kernel.kernel.terminate();
 		}
+
+		numProcessesMutex.release();
 		
 		// Set status
 		if(status != -1)
@@ -584,10 +587,13 @@ System.out.println("already closed");
 		}
 		this.status = status;
 
-		numProcessesMutex.release();
-		this.joinLock.acquire();
-		this.joinWaiter.wake();
-		this.joinLock.release();
+		// Wake parent thread if waiting to join.
+		this.parentProcess.handleChildExiting(this.processID);
+
+		//Finish thread
+		UThread.finish();
+
+		//System.out.println("Process " + this.processID + " exited normally with status " + this.status);
 		return status;
 	}
 
@@ -596,27 +602,18 @@ System.out.println("already closed");
 		this.parentProcess = process;
 	}
 
-	/*
 	public void handleChildExiting(int callingProcessID)
 	{
 		// Wake parent if waiting for child.
+		this.joinLock.acquire();
 		if(this.waitingForProcessID == callingProcessID)
 		{
-			this.joinWaiter.wake();
+			this.joinWaiter.wakeAll();
 			this.waitingForProcessID = -1;
 		}
 
-		// Remove child from list of child processes.
-		for(int i = 0; i < this.childProcesses.size(); i++)
-		{
-			if(this.childProcesses.get(i).getProcessID() == callingProcessID)
-			{
-				this.childProcesses.remove(i);
-				break;
-			}
-		}
+		this.joinLock.release();
 	}
-	*/
 
 	public int getWaitingForProcessID()
 	{
@@ -625,8 +622,7 @@ System.out.println("already closed");
 
 	private int handleExec(int file, int argc, int argv){
 		// Get the executable name (readVirtualMemoryString)	
-		System.out.println(file + " file ," + argc + " argc " + argv + " argv ");	
-
+		//System.out.println(file + " file ," + argc + " argc " + argv + " argv ");	
 		if(file < 0 || argc < 0)
 		{
 			return -1; // Invalid parameters.
@@ -644,7 +640,7 @@ System.out.println("already closed");
 				int numTransferredBytes = this.readVirtualMemory(vaddrOffset, data);
 				if (data.length != numTransferredBytes) 
 				{
-					System.out.println("Not equal number of btyes transferre");
+					// System.out.println("Not equal number of btyes transferre");
 					return -1; // Not equal number of btyes transferred.
 				}
 				
@@ -655,7 +651,7 @@ System.out.println("already closed");
 					argument = this.readVirtualMemoryString(argvPtr, 256);
 					if (argument == null)
 					{
-						System.out.println("invalid argument");
+						// System.out.println("invalid argument");
 					//	return -1; // invalid argument
 					}else{
 						arguments.add(argument);
@@ -676,13 +672,13 @@ System.out.println("already closed");
 			}
 			else
 			{
-				System.out.println("Did not execute.");
+				// System.out.println("Did not execute.");
 				return -1; // Did not execute.
 			}
 		}
 		else
 		{
-			System.out.println("invalid file name");
+			// System.out.println("invalid file name");
 			return -1; // Invalid file name.
 		}
 
@@ -690,40 +686,41 @@ System.out.println("already closed");
 
 	private int handleJoin(int processID, int status){
 		// Search through all the child processes.
-		int location = -1;
 		for(int i = 0; i < childProcesses.size(); i++)
 		{
-			if (childProcesses.get(i).getProcessID() == processID)
+			UserProcess child = childProcesses.get(i);
+			if (child.getProcessID() == processID)
 			{
-				location = i;
-				break;
+                        	this.joinLock.acquire();
+				this.waitingForProcessID = child.getProcessID();
+                        	if(child.getStatus() == 1) // If process is still running
+                        	{
+                                	//System.out.println("Process " + this.processID + "'s child still running!");
+                                	this.joinWaiter.sleep();
+                        	}
+
+                        	this.joinLock.release();
+                        	//System.out.println("Child process finished running and ready to join this processs " + this.processID);
+                        	if (child.status == 0)
+                        	{
+                                	return 1; // Child exited normally.
+                        	}
+                        	else
+                        	{
+                                	return 0; // Child exited with exception, or join is not working.
+                        	}
 			}
 		}
 		
-		if(location == -1){
-			return -1; // the processID is not a child of this process.	
-		}else{
-			UserProcess child = childProcesses.get(location);
-			child.joinLock.acquire();
-			if(child.status == 1) // If process is still running
-			{ 	
-				child.joinWaiter.sleep();
-				child.joinLock.release();
-			}
-			
-			if (child.status == 0)
-			{
-				return 1; // Child exited normally.
-			}
-			else
-			{
-				return 0; // Child exited with exception, or join is not working.
-			}
-		}
+		return -1; // The given processID is not a child's
 	}
 
-	
-public int getProcessID()
+	public int getStatus()
+	{
+		return this.status;
+	}	
+
+	public int getProcessID()
 	{
 		return this.processID;
 	}
@@ -796,7 +793,7 @@ public int getProcessID()
 	 * @return the value to be returned to the user.
 	 */
 	public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
-		//	System.out.println("SYS CALL ENTERING " + syscall + " WITH THING IS " + a0 + " - " + a1 + " - " + a2 + " - " + a3);	
+		//System.out.println("Process " + this.processID + " SYS CALL ENTERING " + syscall + " WITH THING IS " + a0 + " - " + a1 + " - " + a2 + " - " + a3);	
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();
@@ -879,8 +876,9 @@ public int getProcessID()
 	private int processID = 0;
 	private int waitingForProcessID = -1;
 	private Lock joinLock;
-	public Condition joinWaiter;
-	public int status = 1; // 1 is running, 0 is finished, -1 is exception
+	private Condition joinWaiter;
+	private int status = 1; // 1 is running, 0 is finished, -1 is exception
+
 	private static int nextProcessIDAssignment = 0;
 	private static Lock nextIDMutex = new Lock();
 	private static int numProcesses = 0;
