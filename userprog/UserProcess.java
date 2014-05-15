@@ -64,7 +64,9 @@ public class UserProcess {
 	 * @return <tt>true</tt> if the program was successfully executed.
 	 */
 	public boolean execute(String name, String[] args) {
-		if (!load(name, args))
+		boolean loaded = load(name, args);
+		System.out.println("loaded check = " + loaded);
+		if (loaded == false)
 			return false;
 
 		new UThread(this).setName(name).fork();
@@ -104,13 +106,15 @@ public class UserProcess {
 		Lib.assertTrue(maxLength >= 0);
 
 		byte[] bytes = new byte[maxLength + 1];
-
+	
 		int bytesRead = readVirtualMemory(vaddr, bytes);
-
+		
 		for (int length = 0; length < bytesRead; length++) {
+			System.out.println(length + ", " + bytes[length]);
 			if (bytes[length] == 0)
 				return new String(bytes, 0, length);
 		}
+		System.out.println(new String(bytes, 0, bytesRead));
 
 		return null;
 	}
@@ -145,6 +149,7 @@ public class UserProcess {
 	public int readVirtualMemory(int vaddr, byte[] data, int offset, int length) {
 		Lib.assertTrue(offset >= 0 && length >= 0
 				&& offset + length <= data.length);
+		System.out.println("INSIDE READVIRTUALMEMORY to READ ");
 		
 		byte[] memory = Machine.processor().getMemory();
 		int pageSTART = Processor.pageFromAddress(vaddr);
@@ -158,13 +163,15 @@ public class UserProcess {
 		if(pageTable[pageSTART] == null){
 			return 0;
 		}
+		System.out.println("PAGES ARE " + pageSTART);
 		//pagesLock.acquire();
 		int ppn = pageTable[pageSTART].ppn;
 		/* translation of virtual to physical is here */
 		int paddr  = Processor.makeAddress(ppn, offsetFromAddress);
+		System.out.println("PHYS ADDRESS IS AT " + paddr);
 		int amount = Math.min(length, memory.length - paddr);
 		System.arraycopy(memory, paddr, data, offset, amount);
-		//pagesLock.release();
+		System.out.println(data + " IS WHAT I READ");
 		return amount;
 	}    
 
@@ -233,9 +240,9 @@ public class UserProcess {
 	 */
 	private boolean load(String name, String[] args) {
 		Lib.debug(dbgProcess, "UserProcess.load(\"" + name + "\")");
-
 		OpenFile executable = ThreadedKernel.fileSystem.open(name, false);
 		if (executable == null) {
+			System.out.println("unable to load");
 			Lib.debug(dbgProcess, "\topen failed");
 			return false;
 		}
@@ -256,6 +263,7 @@ public class UserProcess {
 			if (section.getFirstVPN() != numPages) {
 				coff.close();
 				Lib.debug(dbgProcess, "\tfragmented executable");
+				System.out.println("fragmented executabe");
 				return false;
 			}
 			numPages += section.getLength();
@@ -271,6 +279,7 @@ public class UserProcess {
 		}
 		if (argsSize > pageSize) {
 			coff.close();
+			System.out.println("args > pageSize");
 			Lib.debug(dbgProcess, "\targuments too long");
 			return false;
 		}
@@ -285,9 +294,10 @@ public class UserProcess {
 		// and finally reserve 1 page for arguments
 		numPages++;
 
-		if (!loadSections())
+		if (!loadSections()){
+			System.out.println("unable to load sections");	
 			return false;
-
+		}
 		// store arguments in last page
 		int entryOffset = (numPages - 1) * pageSize;
 		int stringOffset = entryOffset + args.length * 4;
@@ -405,10 +415,12 @@ public class UserProcess {
 	}
 
 	private int accessFile(int name, boolean createIfNotFound){
+
 		try{
 			String filename = readVirtualMemoryString(name, 256);
+			
 		/* Filename not found. */
-			if(filename == null || filename.length() == 0){
+			if(filename == null || filename.length() == 0){	
 				return -1;
 			}
 			OpenFile file = UserKernel.fileSystem.open(filename, createIfNotFound);
@@ -417,10 +429,11 @@ public class UserProcess {
 				return fileDescriptors.size()-1;
 			}
 			/* File not found */
-			return -2;
+			System.out.println("RETURNING -2 LOL");
+			return -1;
 		}catch(Exception e){
 			/* I dont know */
-			return -3;
+			return -1;
 		}
 	}
 	
@@ -459,34 +472,43 @@ public class UserProcess {
 		byte[] readSpace = new byte[bytesToWrite];
 		int bytesRead = readVirtualMemory(buffer, readSpace);
 		if(bytesRead <= 0){
-			return -3;
+			System.out.println("buffer space is emtpy");
+			return -1;
+			
 			/*	buffer space is empty*/
 		}
 		if(fileDescriptor < 0 || fileDescriptor >= fileDescriptors.size()){
+			System.out.println("invalid index " + fileDescriptor + " , " + fileDescriptors.size());
 			return -1;
+
 			/* invalid index*/
 		}
 		OpenFile file = fileDescriptors.get(fileDescriptor);
 		if(file == null){
-			return -2;
+			System.out.println("file is removed from table");
+			return -1;
 			/* file is removed from table*/
 		}
 		int result = file.write(readSpace, 0, bytesToWrite);
 		if(result == bytesToWrite){
+			//System.out.println("RETURNING " + result);
 			return result;	
 		}else{
-			return -4;
+			System.out.println("write issues " + result + ", " + bytesToWrite);
+			return -1;
 			/* not sure what the problem would be. probably write issues*/
 		}
 	}
 
 	private int handleClose(int fileDescriptor){
 		if(fileDescriptor < 0 || fileDescriptor >= fileDescriptors.size()){
+			System.out.println("invalid index for " + fileDescriptor);
 			return -1;
 			/* invalid index*/
 		}
 		OpenFile file = fileDescriptors.get(fileDescriptor);
 		if(file == null){
+System.out.println("already closed");
 			return -2;
 			/* already closed*/
 		}
@@ -591,7 +613,8 @@ public class UserProcess {
 	}
 
 	private int handleExec(int file, int argc, int argv){
-		// Get the executable name (readVirtualMemoryString)
+		// Get the executable name (readVirtualMemoryString)	
+		System.out.println(file + " file ," + argc + " argc " + argv + " argv ");	
 
 		if(file < 0 || argc < 0)
 		{
@@ -610,7 +633,8 @@ public class UserProcess {
 				int numTransferredBytes = this.readVirtualMemory(vaddrOffset, data);
 				if (data.length != numTransferredBytes) 
 				{
-					return -2; // Not equal number of btyes transferred.
+					System.out.println("Not equal number of btyes transferre");
+					return -1; // Not equal number of btyes transferred.
 				}
 				
 				int argvPtr = Lib.bytesToInt(data, 0);
@@ -620,11 +644,13 @@ public class UserProcess {
 					argument = this.readVirtualMemoryString(argvPtr, 256);
 					if (argument == null)
 					{
-						return -3; // invalid argument
+						System.out.println("invalid argument");
+					//	return -1; // invalid argument
+					}else{
+						arguments.add(argument);
 					}
-
-					arguments.add(argument);
 					vaddrOffset += 4;
+
 				}
 			}
 
@@ -639,12 +665,14 @@ public class UserProcess {
 			}
 			else
 			{
-				return -4; // Did not execute.
+				System.out.println("Did not execute.");
+				return -1; // Did not execute.
 			}
 		}
 		else
 		{
-			return -5; // Invalid file name.
+			System.out.println("invalid file name");
+			return -1; // Invalid file name.
 		}
 
 	}
@@ -748,6 +776,7 @@ public class UserProcess {
 	 * @return the value to be returned to the user.
 	 */
 	public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
+		//	System.out.println("SYS CALL ENTERING " + syscall + " WITH THING IS " + a0 + " - " + a1 + " - " + a2 + " - " + a3);	
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();

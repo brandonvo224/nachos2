@@ -101,7 +101,8 @@ public class UserKernel extends ThreadedKernel {
 		UserProcess process = UserProcess.newUserProcess();
 
 		String shellProgram = Machine.getShellProgramName();
-		Lib.assertTrue(process.execute(shellProgram, new String[] {}));
+		Lib.assertTrue(process.execute(shellProgram, new String[] {"echo.coff", "HIYA :D"}));
+
 
 		KThread.currentThread().finish();
 	}
@@ -129,11 +130,7 @@ public class UserKernel extends ThreadedKernel {
 		}
 		int[]  alloPages = new int[amnt];
 		for(int i = 0; i < amnt; i++){
-<<<<<<< HEAD
-			alloPages[i] = (pages.remove(0));
-=======
 			alloPages[i] = (pages.remove(pages.size()-1));
->>>>>>> 64ac0567096d6af9602f9200804ffa69fdc6809e
 		}
 		pagesLock.release();
 		return alloPages;
