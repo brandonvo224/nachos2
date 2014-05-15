@@ -456,13 +456,13 @@ public class UserProcess {
 
 		if(file == null){
 			/* file is removed from table*/
-			return -2;
+			return -1;
 		}
 
 		byte[] writeSpace = new byte[bytesToRead];
 		int readCount = file.read(writeSpace, 0, bytesToRead);
 		if(readCount <= 0){
-			return -3;
+			return -1;
 			/* file is empty or something weird happened*/
 		}
 		return writeVirtualMemory(buffer, writeSpace, 0, readCount);
@@ -511,13 +511,13 @@ public class UserProcess {
 		OpenFile file = fileDescriptors.get(fileDescriptor);
 		if(file == null){
 System.out.println("already closed");
-			return -2;
+			return -1;
 			/* already closed*/
 		}
 		try{
 			file.close();
 		}catch(Exception e){
-			return -3;
+			return -1;
 			/* file is not allowed to close */
 		}
 		fileDescriptors.set(fileDescriptor, null);
@@ -534,11 +534,11 @@ System.out.println("already closed");
 			if(status){
 				return 0;
 			}else{
-				return -2;
+				return -1;
 				/* no permission to remove*/
 			}
 		}catch(Exception e){
-			return -3;
+			return -1;
 			/**/
 		}
 	}
@@ -546,7 +546,7 @@ System.out.println("already closed");
 	// Handle process exiting.
 	private int handleExit(int status){
 		int returnCode = 0;
-
+		System.out.println("PROCESS " + this.processID + " EXITING");
 		// Close all files used
 		for(int i = 0; i < fileDescriptors.size(); i++)
 		{
@@ -579,8 +579,10 @@ System.out.println("already closed");
 		this.hasReturned = true;
 		numProcessesMutex.release();
 		this.joinLock.acquire();
+		System.out.println("WAKING UP PARENTS...?");
 		this.joinWaiter.wake();
 		this.joinLock.release();
+		System.out.println("EXITING");
 		return status;
 	}
 
@@ -692,12 +694,17 @@ System.out.println("already closed");
 		}
 		
 		if(location == -1){
+			System.out.println("UANBLE TO FIND PROCESS");
 			return -1;		
 		}else{
 			UserProcess child = childProcesses.get(location);
 			child.joinLock.acquire();
+			System.out.println("inside join lock");
 			if(child.hasReturned == false){
+				System.out.println("child has not joined yet!!!");
 				child.joinWaiter.sleep();
+				System.out.println("HAS THE CHILD JOINED YET?? " + child.hasReturned);
+				System.out.println("OK WE ARE GOOD NOW");
 				child.joinLock.release();
 				return 0;
 			}
@@ -778,7 +785,7 @@ System.out.println("already closed");
 	 * @return the value to be returned to the user.
 	 */
 	public int handleSyscall(int syscall, int a0, int a1, int a2, int a3) {
-		//	System.out.println("SYS CALL ENTERING " + syscall + " WITH THING IS " + a0 + " - " + a1 + " - " + a2 + " - " + a3);	
+		System.out.println("SYS CALL ENTERING " + syscall + " WITH THING IS " + a0 + " - " + a1 + " - " + a2 + " - " + a3);	
 		switch (syscall) {
 		case syscallHalt:
 			return handleHalt();
