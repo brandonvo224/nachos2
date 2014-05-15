@@ -511,13 +511,13 @@ public class UserProcess {
 		OpenFile file = fileDescriptors.get(fileDescriptor);
 		if(file == null){
 System.out.println("already closed");
-			return -2;
+			return -1;
 			/* already closed*/
 		}
 		try{
 			file.close();
 		}catch(Exception e){
-			return -3;
+			return -1;
 			/* file is not allowed to close */
 		}
 		fileDescriptors.set(fileDescriptor, null);
@@ -534,11 +534,11 @@ System.out.println("already closed");
 			if(status){
 				return 0;
 			}else{
-				return -2;
+				return -1;
 				/* no permission to remove*/
 			}
 		}catch(Exception e){
-			return -3;
+			return -1;
 			/**/
 		}
 	}
@@ -564,10 +564,10 @@ System.out.println("already closed");
 		this.unloadSections();
 
 		// Set all child processes' parents to null.
-		for(int i = 0; i < this.childProcesses.size(); i++)
-		{
-			this.childProcesses.get(i).setParentProcess(null);
-		}		
+		// for(int i = 0; i < this.childProcesses.size(); i++)
+		// {
+		// 	this.childProcesses.get(i).setParentProcess(null);
+		//}		
 
 		// Decrement the number of processes.
 		numProcessesMutex.acquire();
@@ -576,7 +576,14 @@ System.out.println("already closed");
 		{
 			Kernel.kernel.terminate();
 		}
-		this.hasReturned = true;
+		
+		// Set status
+		if(status != -1)
+		{
+			status = 0;
+		}
+		this.status = status;
+
 		numProcessesMutex.release();
 		this.joinLock.acquire();
 		this.joinWaiter.wake();
@@ -589,6 +596,7 @@ System.out.println("already closed");
 		this.parentProcess = process;
 	}
 
+	/*
 	public void handleChildExiting(int callingProcessID)
 	{
 		// Wake parent if waiting for child.
@@ -608,6 +616,7 @@ System.out.println("already closed");
 			}
 		}
 	}
+	*/
 
 	public int getWaitingForProcessID()
 	{
@@ -692,20 +701,29 @@ System.out.println("already closed");
 		}
 		
 		if(location == -1){
-			return -1;		
+			return -1; // the processID is not a child of this process.	
 		}else{
 			UserProcess child = childProcesses.get(location);
 			child.joinLock.acquire();
-			if(child.hasReturned == false){
+			if(child.status == 1) // If process is still running
+			{ 	
 				child.joinWaiter.sleep();
 				child.joinLock.release();
-				return 0;
+			}
+			
+			if (child.status == 0)
+			{
+				return 1; // Child exited normally.
+			}
+			else
+			{
+				return 0; // Child exited with exception, or join is not working.
 			}
 		}
-		return -1; // The processID is not a child process.
 	}
 
-	public int getProcessID()
+	
+public int getProcessID()
 	{
 		return this.processID;
 	}
@@ -862,8 +880,7 @@ System.out.println("already closed");
 	private int waitingForProcessID = -1;
 	private Lock joinLock;
 	public Condition joinWaiter;
-	public boolean hasReturned = false;
-
+	public int status = 1; // 1 is running, 0 is finished, -1 is exception
 	private static int nextProcessIDAssignment = 0;
 	private static Lock nextIDMutex = new Lock();
 	private static int numProcesses = 0;
