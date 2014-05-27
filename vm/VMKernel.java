@@ -21,6 +21,7 @@ public class VMKernel extends UserKernel {
 	 */
 	public void initialize(String[] args) {
 		super.initialize(args);
+		SwapFile.initialize("nachos.swp");	
 	}
 
 	/**
@@ -41,11 +42,11 @@ public class VMKernel extends UserKernel {
 	 * Terminate this kernel. Never returns.
 	 */
 	public void terminate() {
+		SwapFile.close();
 		super.terminate();
 	}
 
 	// dummy variables to make javac smarter
 	private static VMProcess dummy1 = null;
-
 	private static final char dbgVM = 'v';
 }
