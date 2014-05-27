@@ -48,7 +48,7 @@ public class VMKernel extends UserKernel {
 	}
 
 	public TranslationEntry raisePagefault(UserProcess process, TranslationEntry entry){
-		TranslationEntry 
+
 	}
 
 	// dummy variables to make javac smarter
