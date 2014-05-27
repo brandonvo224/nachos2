@@ -13,10 +13,10 @@ public class SwapFile{
 	private static int PAGESIZE  = Machine.processor().pageSize;
 	public static List<Integer> freePages;
 	private static Lock swapLock;
-	private static byte[] memory = Machine.getMemory();
+	private static byte[] memory = Machine.processor().getMemory();
 
 	public static void initialize(String filename){
-		swapFile = ThreadedKernel.fileSystem.Open(filename);
+		swapFile = ThreadedKernel.fileSystem.open(filename, true);
 		swapName = filename;
 		freePages = new LinkedList<Integer>();
 		swapLock = new Lock();
