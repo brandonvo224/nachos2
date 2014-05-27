@@ -1,7 +1,8 @@
 package nachos.threads;
 
 import nachos.machine.*;
-
+import java.util.Vector;
+import java.util.List;
 /**
  * A KThread is a thread that can be used to execute Nachos kernel code. Nachos
  * allows multiple threads to run concurrently.
@@ -68,6 +69,7 @@ public class KThread {
 
 			createIdleThread();
 		}
+		joinQueue = new Vector<KThread>();
 	}
 
 	/**
@@ -140,7 +142,7 @@ public class KThread {
 	}
 
 	/**
-	 * Causes this thread to begin execution. The result is that two threads are
+	 * Causes this thread to  begin execution. The result is that two threads are
 	 * running concurrently: the current thread (which returns from the call to
 	 * the <tt>fork</tt> method) and the other thread (which executes its
 	 * target's <tt>run</tt> method).
@@ -149,7 +151,7 @@ public class KThread {
 		Lib.assertTrue(status == statusNew);
 		Lib.assertTrue(target != null);
 
-		Lib.debug(dbgThread, "Forking thread: " + toString() + " Runnable: "
+		System.out.println(dbgThread, "Forking thread: " + toString() + " Runnable: "
 				+ target);
 
 		boolean intStatus = Machine.interrupt().disable();
@@ -202,6 +204,10 @@ public class KThread {
 		toBeDestroyed = currentThread;
 
 		currentThread.status = statusFinished;
+		
+		if(currentThread.joinQueue.isEmpty() == false){
+			currentThread.joinQueue.remove(0).ready();
+		}
 
 		sleep();
 	}
@@ -284,7 +290,18 @@ public class KThread {
 		Lib.debug(dbgThread, "Joining to thread: " + toString());
 
 		Lib.assertTrue(this != currentThread);
-
+		boolean intStatus = Machine.interrupt().disable();	
+		
+		if(status == statusFinished){
+			Machine.interrupt().restore(intStatus);
+			return;
+		
+		}else{
+			joinQueue.add(currentThread);	
+			currentThread.sleep();
+				
+		}
+		Machine.interrupt().restore(intStatus);
 	}
 
 	/**
@@ -391,6 +408,7 @@ public class KThread {
 		Lib.assertTrue(this == currentThread);
 	}
 
+	/*
 	private static class PingTest implements Runnable {
 		PingTest(int which) {
 			this.which = which;
@@ -398,7 +416,7 @@ public class KThread {
 
 		public void run() {
 			for (int i = 0; i < 5; i++) {
-				System.out.println("*** thread " + which + " looped " + i
+				System.out.println("*** awesome thread " + which + " looped " + i
 						+ " times");
 				currentThread.yield();
 			}
@@ -406,19 +424,108 @@ public class KThread {
 
 		private int which;
 	}
+	*/
+
+	// A class that contains the tester. You pass this to the KThread constructor
+	// to give the thread code to execute. 
+	private static class MyTester implements Runnable {
+    		// Thread local copies of global variables go here. You need to access these
+    		// variables in run, but they are passed to the tester in the constructor.
+    		private int id;
+    
+    		// Construct the object. Pass the ID of the thread plus any variables you
+    		// want to share between threads. You may want to pass a KThread as a global
+    		// variable to test join.
+		MyTester(int id) {
+	    		this.id = id;
+		}
+	
+		// This method contains the actual code run by the thread. The constructor
+		// is run by the main thread! You will want to test methods, such as,
+		// join, waitUntil, speak, and listen, in here. 
+		public void run() {
+	    		// Use an if statement to make the different threads execute different
+	    		// code.
+	    		if (id == 0)
+			{
+	        		for (int i = 0; i < 5; i++) 
+				{
+	            			System.out.println("Thread 0");
+	            			KThread.currentThread.yield();
+	        		}
+	    		} else {
+	        		for (int i = 0; i < 5; i++) {
+	            			System.out.println("Thread 1");
+	            			KThread.currentThread.yield();
+	        		}
+	    		}
+		}
+	}
+
+	
+	static boolean workerDone = false;
+	static Alarm alarm = new Alarm();
+
+
+	// This method is called by the kernel when Nachos starts. 
+	public static void selfTest() {
+		
+	}
+
+	private static class Listener implements Runnable {
+		private int msg;
+		private Communicator commu;
+		private boolean hasRun;
+
+		private Listener(Communicator commu) {
+			this.commu = commu;
+			this.hasRun = false;
+		}
+
+		public void run() {
+			System.out.println("Listener Listening!");
+			msg = commu.listen();
+			System.out.println("Listener Return!");
+			hasRun = true;
+		}
+
+		private int getMessage() {
+			System.out.println("Listener has finished running --" +hasRun);
+			return msg;
+		}
+	}
+
+	private static class Speaker implements Runnable {
+		private int msg;
+		private Communicator commu;
+
+		private Speaker(int msg, Communicator commu) {
+			this.msg = msg;
+			this.commu = commu;
+		}
+
+		public void run() {
+			System.out.println("Speaker Speaking!");
+			commu.speak(msg);
+			System.out.println("Speaker Return!");
+		}
+	}
+
 
 	/**
 	 * Tests whether this module is working.
 	 */
+	/*
 	public static void selfTest() {
 		Lib.debug(dbgThread, "Enter KThread.selfTest");
 
 		new KThread(new PingTest(1)).setName("forked thread").fork();
 		new PingTest(0).run();
 	}
+	*/
 
 	private static final char dbgThread = 't';
-
+	
 	/**
 	 * Additional state used by schedulers.
 	 * 
@@ -460,7 +567,9 @@ public class KThread {
 
 	private static ThreadQueue readyQueue = null;
 
-	private static KThread currentThread = null;
+	private static KThread currentThread = null;	
+
+	private List<KThread> joinQueue = null;	
 
 	private static KThread toBeDestroyed = null;
 
