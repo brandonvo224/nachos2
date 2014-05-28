@@ -38,7 +38,7 @@ public class SwapFile{
 	/* we will try to allocate a free page from the freepages*/
 	public static int insertPage(int ppn){		
 		int numBits = 0;
-		int spn = 0;
+		int spn = swapFile.length() / PAGESIZE;
 		if(freePages.size() > 0){
 			spn = freepages.remove(0);
 		}
