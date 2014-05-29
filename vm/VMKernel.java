@@ -88,10 +88,10 @@ public class VMKernel extends UserKernel {
 				ownedMemory[clockHand].te.valid = false;
 			}*/
 	//	}
-		ownedMemory[victim].te.valid = false; // no longer exists in memory.
-		ownedMemory[entry.ppn].te = entry; // this physical memory is occupied
+		ownedMemory[victim].te = entry; // we are switching the entry to this new physical space.
+		ownedMemory[entry.ppn].te.valid = false; // the old space is now meh
 		if(ownedMemory[entry.ppn].inSwap){
-			SwapFile.readPage(entry.vpn, clockHand);
+			SwapFile.readPage(entry.vpn, victim);
 		}
 		entry.ppn = victim;
 		entry.valid = true;
