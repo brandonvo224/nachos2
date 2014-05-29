@@ -63,7 +63,7 @@ public class VMKernel extends UserKernel {
 			victim = freePages.remove(0).intValue();
 		}else{
 	
-		// Perform clock algorithm to select page to swap
+			// Perform clock algorithm to select page to swap
 			while(ownedMemory[clockHand].referenced == true)
 			{
 				ownedMemory[clockHand].referenced = false;
@@ -75,7 +75,7 @@ public class VMKernel extends UserKernel {
 		// Swap pages
 		//if(!ownedMemory[clockHand].te.readOnly) // its in the coff
 	//	{
-			if(ownedMemory[victim].te.dirty == true) // we gotta swap in 
+			if(ownedMemory[victim].te.dirty == true) // we gotta swap to memory 
 			{
 				//SwapFile.insertPage(ownedMemory[clockHand].te.vpn, clockHand);
 				ownedMemory[victim].te.vpn = SwapFile.insertPage(victim);
@@ -89,7 +89,7 @@ public class VMKernel extends UserKernel {
 			}*/
 	//	}
 		ownedMemory[victim].te = entry; // we are switching the entry to this new physical space.
-		ownedMemory[entry.ppn].te.valid = false; // the old space is now meh
+		ownedMemory[entry.ppn].te.valid = false; // the old space is now meh TODO: We need to do this in process as well.
 		if(ownedMemory[entry.ppn].inSwap){
 			SwapFile.readPage(entry.vpn, victim);
 		}
