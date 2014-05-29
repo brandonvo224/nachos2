@@ -24,7 +24,11 @@ public class VMKernel extends UserKernel {
 		SwapFile.initialize("nachos.swp");	
 		
 		ownedMemory = new PhysicalPageInfo[Machine.processor().getNumPhysPages()];
-
+		for(int i = 0; i < Machine.processor().getNumPhysPages(); i++){
+			ownedmemory[i] = new PhysicalPageInfo();
+		}
+		memoryLock = new Lock();
+		allPinned = new Condition(memoryLock);	
 		//invertedPageTable = new HashMap<TEKey, ProcessTranslationEntry>();
 	}
 
@@ -50,82 +54,73 @@ public class VMKernel extends UserKernel {
 		super.terminate();
 	}
 
-	int clockHand = 0;
+	
 	public TranslationEntry raisePagefault(UserProcess process, TranslationEntry entry){
-		
-		// If no empty page frames exist
-		for(int i = 0; i < Machine.processor().getNumPhysPages(); i++)
-		{
-			// Find an unused physical memory page
-			if(ownedMemory[i].process.getProcessID() == null)
-			{
-				ownedMemory[i].process.getProcessID() = process.getProcessID();
-				TranslationEntry newEntry = new TranslationEntry
-					(
-						entry.vpn,
-						i,
-						true, 
-						false, 
-						false, 
-						false
-					);
-				ownedMemory[i].te = newEntry;
-				return newEntry;
-			}
-		}
-
+		Coff coff = process.coff;
+		int victim = -1;
+		/* if free pageList is not empty*/
+		if(freePages.size() > 0){
+			victim = freePages.remove(0).intValue();
+		}else{
+	
 		// Perform clock algorithm to select page to swap
-		while(ownedMemory[clockHand].referenced == true)
-		{
-			ownedMemory[clockHand].referenced = false;
-			clockHand++;
-			if(clockHand >= ownedMemory.length)
+			while(ownedMemory[clockHand].referenced == true)
 			{
-				clockHand = 0;
+				ownedMemory[clockHand].referenced = false;
+				clockHand = (clockHand+1)%ownedMemory.length;
 			}
+			victim = clockHand;
+			clockHand = (clockHand+1)%ownedMemory.length;
 		}
-
 		// Swap pages
-		if(!ownedMemory[clockHand].te.readOnly)
-		{
-			if(ownedMemory[clockHand].te.dirty == true)
+		//if(!ownedMemory[clockHand].te.readOnly) // its in the coff
+	//	{
+			if(ownedMemory[victim].te.dirty == true) // we gotta swap in 
 			{
 				//SwapFile.insertPage(ownedMemory[clockHand].te.vpn, clockHand);
-				ownedMemory[clockHand].spn = SwapFileinsertPage(clockHand);
+				ownedMemory[victim].te.vpn = SwapFile.insertPage(victim);
+				ownedMemory[victim].inSwap = true;
+			
 			}
-			else
+		/*	else
 			{
+				 
 				ownedMemory[clockHand].te.valid = false;
-			}
+			}*/
+	//	}
+		ownedMemory[victim].te.valid = false; // no longer exists in memory.
+		ownedMemory[entry.ppn].te = entry; // this physical memory is occupied
+		if(ownedMemory[entry.ppn].inSwap){
+			SwapFile.readPage(entry.vpn, clockHand);
 		}
-
-		
-		if(ownedMemory[entry.ppn].spn != null)
-		{
-			SwapFile.readPage(ownedMemory[entry.ppn].spn , clockHand);
-		}
+		entry.ppn = victim;
+		entry.valid = true;
+		return entry;
 	}
 
 	// This is the inverted table, indexed by physical page number.
-	private PhysicalPageInfo[] ownedMemory;
-
+	protected PhysicalPageInfo[] ownedMemory;
+	private Condition allPinned;
+	private Lock memoryLock;
+	private int clockHand = 0;
 	// dummy variables to make javac smarter
 	private static VMProcess dummy1 = null;
 	private static final char dbgVM = 'v';
 
 	private class PhysicalPageInfo
 	{
-		public UserProcess process;
+		public int processID;
 		public TranslationEntry te;
 		public boolean referenced;
 		public boolean pinned;
+		public boolean inSwap;
+
 		public PhysicalPageInfo()
 		{
-			this.process = null;
-			this.te = null;
+			this.te = new TranslationEntry();
 			this.referenced = true;
 			this.pinned = false;
-
+			this.inSwap = false;
 		}
 	}
 	// public static HashTable<TEKey, ProcessTranslationEntry> invertedPageTable;

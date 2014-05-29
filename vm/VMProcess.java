@@ -83,6 +83,7 @@ public class VMProcess extends UserProcess {
 		TranslationEntry entry = GetPageTableEntryFromVPN(vpn);
 		if(entry.valid == false){
 			entry = VMKernel.raisePagefault(this, entry);	
+			pageTable[vpn] = entry;
 		}
 		int location  = allocateTLBEntry();
 		Machine.processor().writeTLBEntry(location, entry);
@@ -123,6 +124,8 @@ public class VMProcess extends UserProcess {
 				pageTable[i].dirty = entry.dirty;			
 			}
 		}
+//		VMKernel.ownedMemory[entry.ppn].te.dirty = entry.dirty;
+//		VMKernel.ownedMemory[entry.ppn].te.used = entry.used;
 	}
 
 	private TranslationEntry checkPageTables(int vAddr){
