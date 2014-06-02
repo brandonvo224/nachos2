@@ -89,7 +89,7 @@ public class VMProcess extends UserProcess {
 		Machine.processor().writeTLBEntry(location, entry);
 	}
 
-	private TranslationEntry GetPageTableEntryFromVPN(int vpn){
+	private  TranslationEntry GetPageTableEntryFromVPN(int vpn){
 		for(int i = 0; i < pageTable.length; i++){
 			if(pageTable[i].vpn == vpn){
 				return pageTable[i];
@@ -98,7 +98,7 @@ public class VMProcess extends UserProcess {
 		return null;
 	}
 
-	private int  allocateTLBEntry(){
+	private int allocateTLBEntry(){
 		TranslationEntry entry = null;
 		for(int i = 0; i < Machine.processor().getTLBSize();i++){
 			entry = Machine.processor().readTLBEntry(i);
@@ -124,12 +124,17 @@ public class VMProcess extends UserProcess {
 				pageTable[i].dirty = entry.dirty;			
 			}
 		}
-//		VMKernel.ownedMemory[entry.ppn].te.dirty = entry.dirty;
-//		VMKernel.ownedMemory[entry.ppn].te.used = entry.used;
+	//	VMKernel.ownedMemory[entry.ppn].te.dirty = entry.dirty;
+	//	VMKernel.ownedMemory[entry.ppn].te.used = entry.used;
 	}
 
-	private TranslationEntry checkPageTables(int vAddr){
-		return null;
+	protected int pinVirtualPage(int vpn, boolean isUserWrite){
+		VMKernel.pinPage(pageTable[vpn].ppn);
+		return super.pinVirtualPage(vpn,isUserWrite);
+	}
+
+	protected void unpinVirtualPage(int vpn){
+		VMKernel.unpinPage(pageTable[vpn].ppn);
 	}
 
 	private static final int pageSize = Processor.pageSize;

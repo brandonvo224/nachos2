@@ -57,49 +57,62 @@ public class VMKernel extends UserKernel {
 	
 	public TranslationEntry raisePagefault(UserProcess process, TranslationEntry entry){
 		Coff coff = process.coff;
-		int victim = -1;
-		/* if free pageList is not empty*/
-		if(freePages.size() > 0){
-			victim = freePages.remove(0).intValue();
-		}else{
-	
-		// Perform clock algorithm to select page to swap
-			while(ownedMemory[clockHand].referenced == true)
-			{
-				ownedMemory[clockHand].referenced = false;
-				clockHand = (clockHand+1)%ownedMemory.length;
-			}
-			victim = clockHand;
-			clockHand = (clockHand+1)%ownedMemory.length;
+		if(numPins == ownedMemory.length){	// all being used
+			allPinned.sleep();
 		}
-		// Swap pages
-		//if(!ownedMemory[clockHand].te.readOnly) // its in the coff
-	//	{
-			if(ownedMemory[victim].te.dirty == true) // we gotta swap in 
+		while(freePages.isEmpty())
 			{
-				//SwapFile.insertPage(ownedMemory[clockHand].te.vpn, clockHand);
-				ownedMemory[victim].te.vpn = SwapFile.insertPage(victim);
-				ownedMemory[victim].inSwap = true;
-			
+				PhysicalPageInfo frame = ownedMemory[clockHand];
+				if(frame.pinCount == 0){ // no processes using
+					if(frame.te.used == true){
+						frame.te.used = false;
+					}else{
+						if(frame.te.dirty == true){
+						    frame.te.vpn = SwapFile.insertPage(clockHand);
+						    frame.inSwap = true;
+						}
+						frame.te.used = true;
+						frame.te.valid = false;
+						freePages.add(clockHand);
+					}
+				}
+				clockHand =  (clockHand+1)%ownedMemory.length;
 			}
-		/*	else
-			{
-				 
-				ownedMemory[clockHand].te.valid = false;
-			}*/
-	//	}
-		ownedMemory[victim].te = entry; // we are switching the entry to this new physical space.
-		ownedMemory[entry.ppn].te.valid = false; // the old space is now meh
-		if(ownedMemory[entry.ppn].inSwap){
-			SwapFile.readPage(entry.vpn, victim);
-		}
+		
+		int victim = freePages.remove(0).intValue();
+		ownedMemory[victim].te = entry; 
+		ownedMemory[victim].process = process;
 		entry.ppn = victim;
 		entry.valid = true;
+		// we are switching the entry to this new physical space.
+		if(ownedMemory[entry.ppn].inSwap){ 
+			SwapFile.readPage(entry.vpn, entry.ppn);
+		}else{
+			int vpn = entry.vpn;
+			for(int s = 0; i < coff.getNumSections(); i++){
+				CoffSection section = coff.getSection(s);
+				if(vpn < section.getFirstVPN()+section.getLength()){
+					section.loadPage(vpn, entry.ppn);
+					break;
+				}
+			}
+		}
 		return entry;
+	}
+
+	public static void pinPage(int ppn){
+		ownedMemory[ppn].pinCount++;
+		numPins++;
+	}
+
+	public static void pinPage(int ppn){
+		ownedMemory[ppn].pinCount++;
+		numPins--;
 	}
 
 	// This is the inverted table, indexed by physical page number.
 	protected PhysicalPageInfo[] ownedMemory;
+	private int numPins = 0;
 	private Condition allPinned;
 	private Lock memoryLock;
 	private int clockHand = 0;
@@ -109,17 +122,20 @@ public class VMKernel extends UserKernel {
 
 	private class PhysicalPageInfo
 	{
-		public int processID;
+		public VMProcess process;
 		public TranslationEntry te;
-		public boolean referenced;
-		public boolean pinned;
+		public int pinCount;
+		public boolean freeWhenUnpinned;
+		public boolean used;
 		public boolean inSwap;
 
 		public PhysicalPageInfo()
 		{
 			this.te = new TranslationEntry();
-			this.referenced = true;
-			this.pinned = false;
+			this.pinCount = 0;
+			this.processID = -1;
+			this.freeWhenUnpinned = false;	
+			this.used = true;
 			this.inSwap = false;
 		}
 	}
