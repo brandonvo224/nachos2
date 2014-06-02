@@ -56,21 +56,22 @@ public class VMKernel extends UserKernel {
 
 	
 	public TranslationEntry raisePagefault(UserProcess process, TranslationEntry entry){
+		
 		Coff coff = process.coff;
 		if(numPins == ownedMemory.length){	// all being used
 			allPinned.sleep();
 		}
 		while(freePages.isEmpty())
-			{
-				PhysicalPageInfo frame = ownedMemory[clockHand];
-				if(frame.pinCount == 0){ // no processes using
-					if(frame.te.used == true){
-						frame.te.used = false;
+		{
+			PhysicalPageInfo frame = ownedMemory[clockHand];
+			if(frame.pinCount == 0){ // no processes using
+				if(frame.te.used == true){
+					frame.te.used = false;
+				}else{
+					if(frame.te.dirty == true){
+						frame.te.vpn = SwapFile.insertPage(clockHand);
+						frame.inSwap = true;
 					}else{
-						if(frame.te.dirty == true){
-						    frame.te.vpn = SwapFile.insertPage(clockHand);
-						    frame.inSwap = true;
-						}
 						frame.te.used = true;
 						frame.te.valid = false;
 						freePages.add(clockHand);
@@ -78,7 +79,7 @@ public class VMKernel extends UserKernel {
 				}
 				clockHand =  (clockHand+1)%ownedMemory.length;
 			}
-		
+		}	
 		int victim = freePages.remove(0).intValue();
 		ownedMemory[victim].te = entry; 
 		ownedMemory[victim].process = process;
