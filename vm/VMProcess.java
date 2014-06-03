@@ -30,7 +30,18 @@ public class VMProcess extends UserProcess {
 			}
 		}
 	}
-
+		
+	public void invalidateEntry(TranslationEntry e){
+		e.valid = false;
+		for(int i = 0; i < Machine.processor().getTLBSize(); i++){
+			TranslationEntry entry = Machine.processor().readTLBEntry(i);
+			if(entry.ppn == e.ppn){
+				entry.valid = false;
+				Machine.processor().writeTLBEntry(i,entry);
+			}
+		}		
+	}
+	
 	/**
 	 * Restore the state of this process after a context switch. Called by
 	 * <tt>UThread.restoreState()</tt>.
@@ -46,14 +57,48 @@ public class VMProcess extends UserProcess {
 	 * @return <tt>true</tt> if successful.
 	 */
 	protected boolean loadSections() {
-		return super.loadSections();
+		//VMKernel.memoryLock.acquire();
+		pageTable = new TranslationEntry[numPages];
+		for(int vpn = 0; vpn < numPages; vpn++){
+			pageTable[vpn] = new TranslationEntry();
+		}
+		// maps out coff sections
+		for(int s = 0; s < coff.getNumSections(); s++){
+			CoffSection section = coff.getSection(s);
+			for(int j = 0; j < section.getLength(); j++){
+				int vpn = section.getFirstVPN() + j;
+				pageTable[vpn].used = false;
+				pageTable[vpn].dirty = false;
+				pageTable[vpn].valid = false;
+				pageTable[vpn].readOnly = section.isReadOnly();
+				pageTable[vpn].vpn = vpn;
+			}
+		}
+		// maps out stack pages on top 
+		// rule - vpns are negative for coffs
+		for(int s = numPages - (stackPages + 1); s < numPages; s++){
+			pageTable[s].valid = false;
+			pageTable[s].readOnly = false;
+			pageTable[s].dirty = false;
+			pageTable[s].vpn = Integer.MAX_VALUE;
+		}
+		//VMKernel.memoryLock.release();
+		return true;
+//		return super.loadSections();
 	}
+
 
 	/**
 	 * Release any resources allocated by <tt>loadSections()</tt>.
 	 */
 	protected void unloadSections() {
+		for(int i = 0; i < pageTable.length; i++){
+			if(pageTable[i].readOnly == false && pageTable[i].valid == false){
+				SwapFile.free(pageTable[i].vpn);	// free swap file space
+			}
+		}
 		super.unloadSections();
+		
 	}
 
 	/**
@@ -136,6 +181,12 @@ public class VMProcess extends UserProcess {
 	protected void unpinVirtualPage(int vpn){
 		VMKernel.unpinPage(pageTable[vpn].ppn);
 	}
+
+	public Coff getCoff(){
+		return this.coff;
+	}
+
+	
 
 	private static final int pageSize = Processor.pageSize;
 

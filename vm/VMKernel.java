@@ -25,7 +25,7 @@ public class VMKernel extends UserKernel {
 		
 		ownedMemory = new PhysicalPageInfo[Machine.processor().getNumPhysPages()];
 		for(int i = 0; i < Machine.processor().getNumPhysPages(); i++){
-			ownedmemory[i] = new PhysicalPageInfo();
+			ownedMemory[i] = new PhysicalPageInfo();
 		}
 		memoryLock = new Lock();
 		allPinned = new Condition(memoryLock);	
@@ -55,9 +55,9 @@ public class VMKernel extends UserKernel {
 	}
 
 	
-	public TranslationEntry raisePagefault(UserProcess process, TranslationEntry entry){
+	public static TranslationEntry raisePagefault(VMProcess process, TranslationEntry entry){
 		
-		Coff coff = process.coff;
+		Coff coff = process.getCoff();
 		if(numPins == ownedMemory.length){	// all being used
 			allPinned.sleep();
 		}
@@ -68,17 +68,17 @@ public class VMKernel extends UserKernel {
 				if(frame.te.used == true){
 					frame.te.used = false;
 				}else{
+					if(frame.process != null){
+						frame.process.invalidateEntry(frame.te);
+					} 
 					if(frame.te.dirty == true){
 						frame.te.vpn = SwapFile.insertPage(clockHand);
-						frame.inSwap = true;
-					}else{
-						frame.te.used = true;
-						frame.te.valid = false;
-						freePages.add(clockHand);
-					}
+					}	
+					freePages.add(clockHand);
+					
 				}
-				clockHand =  (clockHand+1)%ownedMemory.length;
 			}
+			clockHand = (clockHand+1)%ownedMemory.length;
 		}	
 		int victim = freePages.remove(0).intValue();
 		ownedMemory[victim].te = entry; 
@@ -86,15 +86,17 @@ public class VMKernel extends UserKernel {
 		entry.ppn = victim;
 		entry.valid = true;
 		// we are switching the entry to this new physical space.
-		if(ownedMemory[entry.ppn].inSwap){ 
-			SwapFile.readPage(entry.vpn, entry.ppn);
-		}else{
-			int vpn = entry.vpn;
-			for(int s = 0; i < coff.getNumSections(); i++){
+		if(entry.readOnly == false){
+			if(entry.vpn != Integer.MAX_VALUE){ 
+				SwapFile.readPage(entry.vpn, entry.ppn);
+			}
+		}else{	// we set the coff vpn to negative if it belonged to a coff
+			for(int s = 0; s < coff.getNumSections(); s++){
 				CoffSection section = coff.getSection(s);
-				if(vpn < section.getFirstVPN()+section.getLength()){
-					section.loadPage(vpn, entry.ppn);
-					break;
+				for(int j = 0; j < section.getLength(); j++){
+					if(section.getFirstVPN() + j == entry.vpn){
+						section.loadPage(entry.vpn, entry.ppn);
+					}
 				}
 			}
 		}
@@ -106,24 +108,25 @@ public class VMKernel extends UserKernel {
 		numPins++;
 	}
 
-	public static void pinPage(int ppn){
+	public static void unpinPage(int ppn){
 		ownedMemory[ppn].pinCount++;
 		numPins--;
+		allPinned.wakeAll();
 	}
 
 	// This is the inverted table, indexed by physical page number.
-	protected PhysicalPageInfo[] ownedMemory;
-	private int numPins = 0;
-	private Condition allPinned;
-	private Lock memoryLock;
-	private int clockHand = 0;
+	protected static PhysicalPageInfo[] ownedMemory;
+	private static int numPins = 0;
+	private static Condition allPinned;
+	private static Lock memoryLock;
+	private static int clockHand = 0;
 	// dummy variables to make javac smarter
 	private static VMProcess dummy1 = null;
 	private static final char dbgVM = 'v';
 
 	private class PhysicalPageInfo
 	{
-		public VMProcess process;
+		public UserProcess process;
 		public TranslationEntry te;
 		public int pinCount;
 		public boolean freeWhenUnpinned;
@@ -134,7 +137,7 @@ public class VMKernel extends UserKernel {
 		{
 			this.te = new TranslationEntry();
 			this.pinCount = 0;
-			this.processID = -1;
+			this.process = null;
 			this.freeWhenUnpinned = false;	
 			this.used = true;
 			this.inSwap = false;

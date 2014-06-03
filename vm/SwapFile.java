@@ -18,7 +18,7 @@ public class SwapFile{
 	public static void initialize(String filename){
 		swapFile = ThreadedKernel.fileSystem.open(filename, true);
 		swapName = filename;
-		freePages = new LinkedList<int>();
+		freePages = new LinkedList<Integer>();
 		swapLock = new Lock();
 	}
 
@@ -40,7 +40,7 @@ public class SwapFile{
 		int numBits = 0;
 		int spn = swapFile.length() / PAGESIZE;
 		if(freePages.size() > 0){
-			spn = freepages.remove(0);
+			spn = freePages.remove(0);
 		}
 		return insertPage(spn, ppn);
 	}
@@ -51,11 +51,9 @@ public class SwapFile{
 		swapLock.release();
 	}
 
-	public static void free(int[] pages){
+	public static void free(int page){
 		swapLock.acquire();
-		for(int i = 0; i < pages.length; i++){
-			freePages.add(pages[i]);		
-		}
+		freePages.add(page);		
 		swapLock.release();
 	}
 	
