@@ -127,7 +127,7 @@ public class UserKernel extends ThreadedKernel {
     /** Guards access to the physical page free list. */
     public static Lock memoryLock;
     /** The physical page free list. */
-    public static LinkedList freePages = new LinkedList();
+    public static LinkedList<Integer> freePages = new LinkedList<Integer>();
 
     // dummy variables to make javac smarter
     private static Coff dummy1 = null;
