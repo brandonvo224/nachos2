@@ -74,13 +74,14 @@ public class VMProcess extends UserProcess {
 				pageTable[vpn].vpn = vpn;
 			}
 		}
+
 		// maps out stack pages on top 
 		// rule - vpns are negative for coffs
 		for(int s = numPages - (stackPages + 1); s < numPages; s++){
 			pageTable[s].valid = false;
 			pageTable[s].readOnly = false;
 			pageTable[s].dirty = false;
-			pageTable[s].vpn = Integer.MAX_VALUE;
+			pageTable[s].vpn = s;
 		}
 		//VMKernel.memoryLock.release();
 		return true;
@@ -104,7 +105,7 @@ public class VMProcess extends UserProcess {
 	/**
 	 * Handle a user exception. Called by <tt>UserKernel.exceptionHandler()</tt>
 	 * . The <i>cause</i> argument identifies which exception occurred; see the
-	 * <tt>Processor.exceptionZZZ</tt> constants.
+	 * <tt>Processor.exceptionumnZZZ</tt> constants.
 	 * 
 	 * @param cause the user exception that occurred.
 	 */
@@ -123,24 +124,41 @@ public class VMProcess extends UserProcess {
 	}
 
 	public void handleTLBMiss(int vAddr){
-		// check for valid addresss here
 		int vpn = Processor.pageFromAddress(vAddr);
-		TranslationEntry entry = GetPageTableEntryFromVPN(vpn);
-		if(entry.valid == false){
-			entry = VMKernel.raisePagefault(this, entry);	
-			pageTable[vpn] = entry;
-		}
+		TranslationEntry entry = handleTLE(vpn);
 		int location  = allocateTLBEntry();
+		System.out.println("ALLOCATED TLB SPACE AT " + location);
 		Machine.processor().writeTLBEntry(location, entry);
+		System.out.println("ENTRY WAS VALID??? " + Machine.processor().readTLBEntry(location).valid);
 	}
 
-	private  TranslationEntry GetPageTableEntryFromVPN(int vpn){
-		for(int i = 0; i < pageTable.length; i++){
-			if(pageTable[i].vpn == vpn){
-				return pageTable[i];
-			}		
+	public TranslationEntry handleTLE(int vpn){
+		System.out.println();
+		System.out.println("TLB MISS PAGE IS AT " + vpn);
+		TranslationEntry entry = GetPageTableEntryFromVPN(vpn);
+		System.out.println("PAGE AT FIRST IS " + entry.vpn + " => " + entry.ppn 
+		+  " AND IT IS VALID?" + entry.valid);
+		if(entry.valid == false){
+			System.out.println("RAISING PAGE FAULT");
+			// its in coff and has NOT been modified
+			if(vpn < (numPages - stackPages - 1) && entry.dirty == false){
+				entry = VMKernel.raisePageFault(this,entry,true);
+			}else{
+				entry = VMKernel.raisePageFault(this, entry, false);	
+			}
+			entry.vpn = vpn;
+			pageTable[vpn] = entry;
+			System.out.println("PAGE FAULT RETURNED " +
+			entry.vpn + "=>" + entry.ppn + " AND IT IS VALID? " + 
+			pageTable[vpn].valid);
 		}
-		return null;
+		return entry;
+	}
+
+	
+
+	private  TranslationEntry GetPageTableEntryFromVPN(int vpn){
+		return pageTable[vpn];
 	}
 
 	private int allocateTLBEntry(){
@@ -148,11 +166,13 @@ public class VMProcess extends UserProcess {
 		for(int i = 0; i < Machine.processor().getTLBSize();i++){
 			entry = Machine.processor().readTLBEntry(i);
 			if(entry.valid == false){
+				System.out.println("VALID WAS FALSE AT " + i);
 				return i;
 			}
 		}
 		// ok so all are valid
 		int victim = Lib.random(Machine.processor().getTLBSize());
+		System.out.println("EVICTED PAGE AT RANDOM??? " + victim);
 		/* Before we evict this guy, we need to sync. */
 		entry = Machine.processor().readTLBEntry(victim);
 		syncTLB(entry);
@@ -174,6 +194,7 @@ public class VMProcess extends UserProcess {
 	}
 
 	protected int pinVirtualPage(int vpn, boolean isUserWrite){
+		handleTLE(vpn);
 		VMKernel.pinPage(pageTable[vpn].ppn);
 		return super.pinVirtualPage(vpn,isUserWrite);
 	}

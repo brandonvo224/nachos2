@@ -12,6 +12,7 @@ public class SwapFile{
 	private static String swapName;
 	private static int PAGESIZE  = Machine.processor().pageSize;
 	public static List<Integer> freePages;
+	public static List<Integer> allocatedPages;
 	private static Lock swapLock;
 	private static byte[] memory = Machine.processor().getMemory();
 
@@ -19,6 +20,7 @@ public class SwapFile{
 		swapFile = ThreadedKernel.fileSystem.open(filename, true);
 		swapName = filename;
 		freePages = new LinkedList<Integer>();
+		allocatedPages = new LinkedList<Integer>();
 		swapLock = new Lock();
 	}
 
@@ -28,9 +30,11 @@ public class SwapFile{
 	}
 
 	public static int insertPage(int spn, int ppn){
+		System.out.println("INSERTING " + ppn + " INTO SWAP NUM " + spn);
 		swapLock.acquire();
 		int numBits = swapFile.write(spn*PAGESIZE, memory, ppn * PAGESIZE, PAGESIZE);	
 		// assert that numBits == PAGESIZE
+		allocatedPages.add(spn);
 		swapLock.release();
 		return spn; 
 	}
@@ -46,9 +50,14 @@ public class SwapFile{
 	}
 	
 	public static void readPage(int spn, int ppn){
-		swapLock.acquire();
-		swapFile.read(spn*PAGESIZE, memory, ppn*PAGESIZE, PAGESIZE);
-		swapLock.release();
+		if(allocatedPages.contains(spn)){
+			System.out.println("ALLOCATED PAGES CONTAIN THE SPN");
+			swapLock.acquire();
+			swapFile.read(spn*PAGESIZE, memory, ppn*PAGESIZE, PAGESIZE);
+			swapLock.release();
+		}else{
+			System.out.println("PAGES WERE NOT HERE...MUST BE EMPTY STACK PAGE");	
+		}
 	}
 
 	public static void free(int page){

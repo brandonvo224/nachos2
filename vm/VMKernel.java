@@ -55,12 +55,15 @@ public class VMKernel extends UserKernel {
 	}
 
 	
-	public static TranslationEntry raisePagefault(VMProcess process, TranslationEntry entry){
+	public static TranslationEntry raisePageFault(VMProcess process, TranslationEntry entry, boolean isCoff){
 		
 		Coff coff = process.getCoff();
 		if(numPins == ownedMemory.length){	// all being used
+			memoryLock.acquire();
 			allPinned.sleep();
+			memoryLock.release();
 		}
+		System.out.println("RUNNING CLOCK ALGORITHM");
 		while(freePages.isEmpty())
 		{
 			PhysicalPageInfo frame = ownedMemory[clockHand];
@@ -72,6 +75,7 @@ public class VMKernel extends UserKernel {
 						frame.process.invalidateEntry(frame.te);
 					} 
 					if(frame.te.dirty == true){
+						System.out.println("WRITING TO SWAP " + clockHand);
 						frame.te.vpn = SwapFile.insertPage(clockHand);
 					}	
 					freePages.add(clockHand);
@@ -80,22 +84,29 @@ public class VMKernel extends UserKernel {
 			}
 			clockHand = (clockHand+1)%ownedMemory.length;
 		}	
+		System.out.println("FREE PAGES ARE : ");
+		for(Integer i : freePages)
+			System.out.print(i + ", ");
 		int victim = freePages.remove(0).intValue();
+		System.out.println("FREE PAGES SIZE IS : " + freePages.size());
+		System.out.println("VICTIM IS " + victim);
 		ownedMemory[victim].te = entry; 
 		ownedMemory[victim].process = process;
 		entry.ppn = victim;
 		entry.valid = true;
 		// we are switching the entry to this new physical space.
-		if(entry.readOnly == false){
-			if(entry.vpn != Integer.MAX_VALUE){ 
+		if(isCoff == false){
+			System.out.println("READING FROM SWAP");
+		//	if(entry.vpn != Integer.MAX_VALUE){ 
 				SwapFile.readPage(entry.vpn, entry.ppn);
-			}
+		//	}
 		}else{	// we set the coff vpn to negative if it belonged to a coff
+			System.out.println("READING FROM COFF " + entry.vpn);
 			for(int s = 0; s < coff.getNumSections(); s++){
 				CoffSection section = coff.getSection(s);
 				for(int j = 0; j < section.getLength(); j++){
 					if(section.getFirstVPN() + j == entry.vpn){
-						section.loadPage(entry.vpn, entry.ppn);
+						section.loadPage(j, entry.ppn);
 					}
 				}
 			}
@@ -111,7 +122,9 @@ public class VMKernel extends UserKernel {
 	public static void unpinPage(int ppn){
 		ownedMemory[ppn].pinCount++;
 		numPins--;
+		memoryLock.acquire();
 		allPinned.wakeAll();
+		memoryLock.release();
 	}
 
 	// This is the inverted table, indexed by physical page number.
@@ -126,7 +139,7 @@ public class VMKernel extends UserKernel {
 
 	private class PhysicalPageInfo
 	{
-		public UserProcess process;
+		public VMProcess process;
 		public TranslationEntry te;
 		public int pinCount;
 		public boolean freeWhenUnpinned;
