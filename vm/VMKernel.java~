@@ -23,12 +23,13 @@ public class VMKernel extends UserKernel {
 		super.initialize(args);
 		SwapFile.initialize("nachos.swp");	
 		
-		ownedMemory = new PhysicalPageInfo[Machine.processor().getNumPhysPages()];
+		invertedPhysicalPageTable = new PhysicalPageInfo[Machine.processor().getNumPhysPages()];
 		for(int i = 0; i < Machine.processor().getNumPhysPages(); i++){
-			ownedMemory[i] = new PhysicalPageInfo();
+			invertedPhysicalPageTable[i] = new PhysicalPageInfo();
 		}
 		memoryLock = new Lock();
 		allPinned = new Condition(memoryLock);	
+		//invertedPageTable = new HashMap<TEKey, ProcessTranslationEntry>();
 	}
 
 	/**
@@ -53,65 +54,98 @@ public class VMKernel extends UserKernel {
 		super.terminate();
 	}
 
+
 	
-	public static TranslationEntry raisePageFault(VMProcess process, TranslationEntry entry, boolean isCoff){
-		System.out.println("freePages size is " + freePages.size());
+	public static TranslationEntry raisePageFault(VMProcess process, TranslationEntry entry, int accessedVpn, boolean isCoff){
+		
 		Coff coff = process.getCoff();
-		if(numPins == ownedMemory.length){	// all being used
+		if(numPins == invertedPhysicalPageTable.length){	// all being used
 			memoryLock.acquire();
 			allPinned.sleep();
 			memoryLock.release();
 		}
+
+		// Run clock algorithm. Choose a victim.
+		//System.out.println("RUNNING CLOCK ALGORITHM");
 		while(freePages.isEmpty())
 		{
-			PhysicalPageInfo frame = ownedMemory[clockHand];
-			if(frame.pinCount == 0){ // no processes using
-				if(frame.te.used == true){
-					frame.te.used = false;
+			clockLock.acquire();
+			PhysicalPageInfo selectedPhysicalPage = invertedPhysicalPageTable[clockHand];
+	
+			// If process did not pin the selected physical page.
+			if(selectedPhysicalPage.pinCount == 0){
+				if(selectedPhysicalPage.translationEntry.used == true){
+					selectedPhysicalPage.translationEntry.used = false;
 				}else{
-					if(frame.process != null){
-						frame.process.invalidateEntry(frame.te);
-					} 	
-					if(frame.te.dirty == true){
-						frame.te.vpn = SwapFile.insertPage(clockHand);
-					}	
-					freePages.add(clockHand);
-					
+					if(selectedPhysicalPage.process != null){
+						selectedPhysicalPage.process.invalidateEntry(selectedPhysicalPage.translationEntry);
+					}
+ 
+					// If selected page has been modified, write the modified page to disk.
+					if(selectedPhysicalPage.translationEntry.dirty == true){
+						//System.out.println("WRITING TO SWAP " + clockHand);
+						selectedPhysicalPage.translationEntry.vpn = SwapFile.insertPage(clockHand); // Should change in the process' page table as well.
+					}
+
+					// Finally, add the selected page number to free pages.
+					freePages.add(clockHand);		
 				}
 			}
-			clockHand = (clockHand+1)%ownedMemory.length;
-		}	
 
-		int victim = freePages.remove(0).intValue();
-		ownedMemory[victim].te = entry; 
-		ownedMemory[victim].process = process;
-		entry.ppn = victim;
+			clockHand = (clockHand+1)%invertedPhysicalPageTable.length; // Increment the clock.
+			clockLock.release();
+		}
+
+		//System.out.println("FREE PAGES ARE : ");
+		//for(Integer i : freePages)
+		//{
+		//	System.out.print(i + ", ");
+		//}
+
+		// Get a free page and set the entry's ppn to it.
+		int victimPageNumber = freePages.remove(0).intValue();
+		//System.out.println("FREE PAGES SIZE IS : " + freePages.size());
+		//System.out.println("VICTIM IS " + victimPageNumber);
+		invertedPhysicalPageTable[victimPageNumber].translationEntry = entry; 
+		invertedPhysicalPageTable[victimPageNumber].process = process;
+		entry.ppn = victimPageNumber;
 		entry.valid = true;
+		entry.dirty = false;
+
 		// we are switching the entry to this new physical space.
-		if(isCoff == false){
-		//	if(entry.vpn != Integer.MAX_VALUE){ 
-				SwapFile.readPage(entry.vpn, entry.ppn);
-		//	}
-		}else{	// we set the coff vpn to negative if it belonged to a coff
-			for(int s = 0; s < coff.getNumSections(); s++){
+		if(isCoff == false && entry.vpn != accessedVpn)
+		{
+			SwapFile.readPage(entry.vpn, entry.ppn); // Replace chosen physical page with swap page.
+			SwapFile.free(entry.vpn);
+			entry.vpn = accessedVpn;
+		}
+		else
+		{	
+			// we set the coff vpn to negative if it belonged to a coff
+			//System.out.println("READING FROM COFF " + entry.vpn);
+			for(int s = 0; s < coff.getNumSections(); s++)
+			{
 				CoffSection section = coff.getSection(s);
-				for(int j = 0; j < section.getLength(); j++){
-					if(section.getFirstVPN() + j == entry.vpn){
+				for(int j = 0; j < section.getLength(); j++)
+				{
+					if(section.getFirstVPN() + j == entry.vpn)
+					{
 						section.loadPage(j, entry.ppn);
 					}
 				}
 			}
 		}
+
 		return entry;
 	}
 
 	public static void pinPage(int ppn){
-		ownedMemory[ppn].pinCount++;
+		invertedPhysicalPageTable[ppn].pinCount++;
 		numPins++;
 	}
 
 	public static void unpinPage(int ppn){
-		ownedMemory[ppn].pinCount++;
+		invertedPhysicalPageTable[ppn].pinCount--;
 		numPins--;
 		memoryLock.acquire();
 		allPinned.wakeAll();
@@ -119,7 +153,7 @@ public class VMKernel extends UserKernel {
 	}
 
 	// This is the inverted table, indexed by physical page number.
-	protected static PhysicalPageInfo[] ownedMemory;
+	protected static PhysicalPageInfo[] invertedPhysicalPageTable;
 	private static int numPins = 0;
 	private static Condition allPinned;
 	private static Lock memoryLock;
@@ -127,25 +161,24 @@ public class VMKernel extends UserKernel {
 	// dummy variables to make javac smarter
 	private static VMProcess dummy1 = null;
 	private static final char dbgVM = 'v';
-
+	static Lock clockLock;
 	private class PhysicalPageInfo
 	{
 		public VMProcess process;
-		public TranslationEntry te;
+		public TranslationEntry translationEntry;
 		public int pinCount;
 		public boolean freeWhenUnpinned;
 		public boolean used;
-		public boolean inSwap;
 
 		public PhysicalPageInfo()
 		{
-			this.te = new TranslationEntry();
+			this.translationEntry = new TranslationEntry();
 			this.pinCount = 0;
 			this.process = null;
 			this.freeWhenUnpinned = false;	
 			this.used = true;
-			this.inSwap = false;
 		}
 	}
 	// public static HashTable<TEKey, ProcessTranslationEntry> invertedPageTable;
 }
+

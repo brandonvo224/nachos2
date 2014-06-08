@@ -140,9 +140,9 @@ public class VMProcess extends UserProcess {
 		//System.out.println("ENTRY HAD A THING OF " + entry.vpn + "=>" + entry.ppn + " AND IT IS " + entry.valid);
 		if(entry.valid == false){
 			if(vpn < (numPages - stackPages - 1) && entry.dirty == false){
-				entry = VMKernel.raisePageFault(this,entry,true);
+				entry = VMKernel.raisePageFault(this,entry, vpn, true);
 			}else{
-				entry = VMKernel.raisePageFault(this, entry, false);	
+				entry = VMKernel.raisePageFault(this, entry, vpn, false);	
 			}
 			entry.vpn = vpn;
 			pageTable[vpn] = entry;
