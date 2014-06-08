@@ -30,7 +30,6 @@ public class SwapFile{
 	}
 
 	public static int insertPage(int spn, int ppn){
-		System.out.println("INSERTING " + ppn + " INTO SWAP NUM " + spn);
 		swapLock.acquire();
 		int numBits = swapFile.write(spn*PAGESIZE, memory, ppn * PAGESIZE, PAGESIZE);	
 		// assert that numBits == PAGESIZE
@@ -51,12 +50,10 @@ public class SwapFile{
 	
 	public static void readPage(int spn, int ppn){
 		if(allocatedPages.contains(spn)){
-			System.out.println("ALLOCATED PAGES CONTAIN THE SPN");
 			swapLock.acquire();
 			swapFile.read(spn*PAGESIZE, memory, ppn*PAGESIZE, PAGESIZE);
 			swapLock.release();
 		}else{
-			System.out.println("PAGES WERE NOT HERE...MUST BE EMPTY STACK PAGE");	
 		}
 	}
 

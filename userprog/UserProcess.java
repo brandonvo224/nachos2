@@ -25,6 +25,7 @@ public class UserProcess {
      * Allocate a new process.
      */
     public UserProcess() {
+
 	UserKernel.processLock.acquire();
 
 	processID = UserKernel.nextProcessID++;
@@ -71,7 +72,6 @@ public class UserProcess {
 	    return false;
 	
 	UserKernel.numRunningProcesses++;
-	
 	new UThread(this).setName(name).fork();
 
 	return true;
@@ -275,7 +275,6 @@ public class UserProcess {
 	OpenFile executable = ThreadedKernel.fileSystem.open(name, false);
 	if (executable == null) {
 	    Lib.debug(dbgProcess, "\topen failed");
-	    System.out.println("EXECUTABLE WAS NULL");
 	    return false;
 	}
 
@@ -284,7 +283,6 @@ public class UserProcess {
 	}
 	catch (EOFException e) {
 	    executable.close();
-	    System.out.println("COFF LOAD FAILED");
 	    Lib.debug(dbgProcess, "\tcoff load failed");
 	    return false;
 	}
@@ -295,7 +293,6 @@ public class UserProcess {
 	    CoffSection section = coff.getSection(s);
 	    if (section.getFirstVPN() != numPages) {
 		coff.close();
-		System.out.println("FRAGMENTED EXECUTABLE");
 		Lib.debug(dbgProcess, "\tfragmented executable");
 		return false;
 	    }
@@ -312,7 +309,6 @@ public class UserProcess {
 	}
 	if (argsSize > pageSize) {
 	    coff.close();
-	    System.out.println("ARGUMENTS TOO LONG");
 	    Lib.debug(dbgProcess, "\targuments too long");
 	    return false;
 	}
@@ -328,7 +324,6 @@ public class UserProcess {
 	numPages++;
 
 	if (!loadSections()){
-	    System.out.println("LOAD SECTIONS FAILEd");
 	    return false;
 	}
 	// store arguments in last page
@@ -348,7 +343,6 @@ public class UserProcess {
 	    Lib.assertTrue(writeVirtualMemory(stringOffset,new byte[] { 0 }) == 1);
 	    stringOffset += 1;
 	}
-
 	return true;
     }
 
@@ -366,7 +360,6 @@ public class UserProcess {
 	if (UserKernel.freePages.size() < numPages) {
 	    UserKernel.memoryLock.release();
 	    coff.close();
-	    System.out.println("INSUFFICIENT PHSICAL MEMORY");
 	    Lib.debug(dbgProcess, "\tinsufficient physical memory");
 	    return false;
 	}

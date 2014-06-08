@@ -29,7 +29,6 @@ public class VMKernel extends UserKernel {
 		}
 		memoryLock = new Lock();
 		allPinned = new Condition(memoryLock);	
-		//invertedPageTable = new HashMap<TEKey, ProcessTranslationEntry>();
 	}
 
 	/**
@@ -56,14 +55,13 @@ public class VMKernel extends UserKernel {
 
 	
 	public static TranslationEntry raisePageFault(VMProcess process, TranslationEntry entry, boolean isCoff){
-		
+	//	System.out.println("freePages size is " + freePages.size());
 		Coff coff = process.getCoff();
 		if(numPins == ownedMemory.length){	// all being used
 			memoryLock.acquire();
 			allPinned.sleep();
 			memoryLock.release();
 		}
-		System.out.println("RUNNING CLOCK ALGORITHM");
 		while(freePages.isEmpty())
 		{
 			PhysicalPageInfo frame = ownedMemory[clockHand];
@@ -73,9 +71,8 @@ public class VMKernel extends UserKernel {
 				}else{
 					if(frame.process != null){
 						frame.process.invalidateEntry(frame.te);
-					} 
+					} 	
 					if(frame.te.dirty == true){
-						System.out.println("WRITING TO SWAP " + clockHand);
 						frame.te.vpn = SwapFile.insertPage(clockHand);
 					}	
 					freePages.add(clockHand);
@@ -84,24 +81,18 @@ public class VMKernel extends UserKernel {
 			}
 			clockHand = (clockHand+1)%ownedMemory.length;
 		}	
-		System.out.println("FREE PAGES ARE : ");
-		for(Integer i : freePages)
-			System.out.print(i + ", ");
+
 		int victim = freePages.remove(0).intValue();
-		System.out.println("FREE PAGES SIZE IS : " + freePages.size());
-		System.out.println("VICTIM IS " + victim);
 		ownedMemory[victim].te = entry; 
 		ownedMemory[victim].process = process;
 		entry.ppn = victim;
 		entry.valid = true;
 		// we are switching the entry to this new physical space.
 		if(isCoff == false){
-			System.out.println("READING FROM SWAP");
 		//	if(entry.vpn != Integer.MAX_VALUE){ 
 				SwapFile.readPage(entry.vpn, entry.ppn);
 		//	}
 		}else{	// we set the coff vpn to negative if it belonged to a coff
-			System.out.println("READING FROM COFF " + entry.vpn);
 			for(int s = 0; s < coff.getNumSections(); s++){
 				CoffSection section = coff.getSection(s);
 				for(int j = 0; j < section.getLength(); j++){

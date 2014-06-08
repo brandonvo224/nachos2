@@ -21,18 +21,20 @@ public class VMProcess extends UserProcess {
 	 * Called by <tt>UThread.saveState()</tt>.
 	 */
 	public void saveState() {
+		//System.out.println("MAKING ALL INVALID");
 		for(int i = 0; i < Machine.processor().getTLBSize(); i++){
 			TranslationEntry entry = Machine.processor().readTLBEntry(i);
 			if(entry.valid == true){
 				entry.valid = false;
 				Machine.processor().writeTLBEntry(i,entry);
-				syncTLB(entry);	
+				syncTLB(entry);
 			}
 		}
 	}
 		
 	public void invalidateEntry(TranslationEntry e){
 		e.valid = false;
+		//System.out.println("INVALIDATING ENTRY " + e.vpn + "=>"+e.ppn);
 		for(int i = 0; i < Machine.processor().getTLBSize(); i++){
 			TranslationEntry entry = Machine.processor().readTLBEntry(i);
 			if(entry.ppn == e.ppn){
@@ -57,6 +59,7 @@ public class VMProcess extends UserProcess {
 	 * @return <tt>true</tt> if successful.
 	 */
 	protected boolean loadSections() {
+
 		//VMKernel.memoryLock.acquire();
 		pageTable = new TranslationEntry[numPages];
 		for(int vpn = 0; vpn < numPages; vpn++){
@@ -125,22 +128,17 @@ public class VMProcess extends UserProcess {
 
 	public void handleTLBMiss(int vAddr){
 		int vpn = Processor.pageFromAddress(vAddr);
+	//	System.out.println("TLB MISS AT PAGE " + vpn);
 		TranslationEntry entry = handleTLE(vpn);
+		
 		int location  = allocateTLBEntry();
-		System.out.println("ALLOCATED TLB SPACE AT " + location);
 		Machine.processor().writeTLBEntry(location, entry);
-		System.out.println("ENTRY WAS VALID??? " + Machine.processor().readTLBEntry(location).valid);
 	}
 
 	public TranslationEntry handleTLE(int vpn){
-		System.out.println();
-		System.out.println("TLB MISS PAGE IS AT " + vpn);
-		TranslationEntry entry = GetPageTableEntryFromVPN(vpn);
-		System.out.println("PAGE AT FIRST IS " + entry.vpn + " => " + entry.ppn 
-		+  " AND IT IS VALID?" + entry.valid);
+		TranslationEntry entry = pageTable[vpn];
+		//System.out.println("ENTRY HAD A THING OF " + entry.vpn + "=>" + entry.ppn + " AND IT IS " + entry.valid);
 		if(entry.valid == false){
-			System.out.println("RAISING PAGE FAULT");
-			// its in coff and has NOT been modified
 			if(vpn < (numPages - stackPages - 1) && entry.dirty == false){
 				entry = VMKernel.raisePageFault(this,entry,true);
 			}else{
@@ -148,38 +146,30 @@ public class VMProcess extends UserProcess {
 			}
 			entry.vpn = vpn;
 			pageTable[vpn] = entry;
-			System.out.println("PAGE FAULT RETURNED " +
-			entry.vpn + "=>" + entry.ppn + " AND IT IS VALID? " + 
-			entry.valid);
+			pageTable[vpn].valid=true;
+		//	System.out.println("HANDLED TLE WITH A " + pageTable[vpn].vpn + "=>" + pageTable[vpn].ppn + " AND IT IS " + pageTable[vpn].valid);
 		}
 		return entry;
 	}
 
-	
-
-	private  TranslationEntry GetPageTableEntryFromVPN(int vpn){
-		return pageTable[vpn];
-	}
 
 	private int allocateTLBEntry(){
 		TranslationEntry entry = null;
 		for(int i = 0; i < Machine.processor().getTLBSize();i++){
 			entry = Machine.processor().readTLBEntry(i);
 			if(entry.valid == false){
-				System.out.println("VALID WAS FALSE AT " + i);
 				return i;
 			}
 		}
 		// ok so all are valid
 		int victim = Lib.random(Machine.processor().getTLBSize());
-		System.out.println("EVICTED PAGE AT RANDOM??? " + victim);
-		/* Before we evict this guy, we need to sync. */
 		entry = Machine.processor().readTLBEntry(victim);
 		syncTLB(entry);
 		return victim;
 	}
 
 	private void syncTLB(TranslationEntry entry){
+	//	System.out.println("SYNC TLB for " + entry.vpn + "=>" + entry.ppn + " AND IT IS NOW " + entry.valid);
 		/* Chances are we may have to sync with swap file as well. */
 		for(int i = 0; i < pageTable.length; i++){
 			if(pageTable[i].ppn == entry.ppn && pageTable[i].vpn == entry.vpn){

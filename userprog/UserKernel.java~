@@ -35,7 +35,6 @@ public class UserKernel extends ThreadedKernel {
 	memoryLock = new Lock();	
 	for (int ppn=0; ppn<Machine.processor().getNumPhysPages(); ppn++)
 	    freePages.add(new Integer(ppn));
-
 		
     }
 

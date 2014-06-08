@@ -25,6 +25,7 @@ public class UserProcess {
      * Allocate a new process.
      */
     public UserProcess() {
+
 	UserKernel.processLock.acquire();
 
 	processID = UserKernel.nextProcessID++;
@@ -71,7 +72,6 @@ public class UserProcess {
 	    return false;
 	
 	UserKernel.numRunningProcesses++;
-	
 	new UThread(this).setName(name).fork();
 
 	return true;
@@ -323,9 +323,9 @@ public class UserProcess {
 	// and finally reserve 1 page for arguments
 	numPages++;
 
-	if (!loadSections())
+	if (!loadSections()){
 	    return false;
-
+	}
 	// store arguments in last page
 	int entryOffset = (numPages-1)*pageSize;
 	int stringOffset = entryOffset + args.length*4;
@@ -343,7 +343,7 @@ public class UserProcess {
 	    Lib.assertTrue(writeVirtualMemory(stringOffset,new byte[] { 0 }) == 1);
 	    stringOffset += 1;
 	}
-
+	System.out.println("LOADED COMPLETE");
 	return true;
     }
 
