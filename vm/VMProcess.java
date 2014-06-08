@@ -142,9 +142,9 @@ public class VMProcess extends UserProcess {
 			System.out.println("RAISING PAGE FAULT");
 			// its in coff and has NOT been modified
 			if(vpn < (numPages - stackPages - 1) && entry.dirty == false){
-				entry = VMKernel.raisePageFault(this,entry,true);
+				entry = VMKernel.raisePageFault(this,entry, vpn, true);
 			}else{
-				entry = VMKernel.raisePageFault(this, entry, false);	
+				entry = VMKernel.raisePageFault(this, entry, vpn, false);	
 			}
 			entry.vpn = vpn;
 			pageTable[vpn] = entry;
