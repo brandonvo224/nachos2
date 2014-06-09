@@ -242,7 +242,7 @@ public class UserProcess {
 	    return -1;
 
 	TranslationEntry entry = pageTable[vpn];
-	if (!entry.valid || entry.vpn != vpn)
+	if (!entry.valid) //  || entry.vpn != vpn)
 	    return -1;
 
 	if (isUserWrite) {

@@ -14,6 +14,7 @@ public class VMProcess extends UserProcess {
 	 */
 	public VMProcess() {
 		super();
+		this.pageTableLock = new Lock();
 	}
 
 	/**
@@ -21,27 +22,42 @@ public class VMProcess extends UserProcess {
 	 * Called by <tt>UThread.saveState()</tt>.
 	 */
 	public void saveState() {
-		//System.out.println("MAKING ALL INVALID");
+		System.out.println("Process " + this.processID() + " IS CALLING SAVE STATE");
+		boolean status = Machine.interrupt().disable();
+		TLBLock.acquire();
 		for(int i = 0; i < Machine.processor().getTLBSize(); i++){
 			TranslationEntry entry = Machine.processor().readTLBEntry(i);
 			if(entry.valid == true){
+				// Sync
+				this.syncTLBEntry(entry);
+
+				// Flush
 				entry.valid = false;
 				Machine.processor().writeTLBEntry(i,entry);
-				syncTLB(entry);
 			}
 		}
+		
+		TLBLock.release();
+		Machine.interrupt().setStatus(status);
+		System.out.println("Process " + this.processID() + " is finished saving state.");
 	}
 		
 	public void invalidateEntry(TranslationEntry e){
+		//this.pageTableLock.acquire();
 		e.valid = false;
+		//this.pageTableLock.release();
+		
+		// TLBLock.acquire();
 		//System.out.println("INVALIDATING ENTRY " + e.vpn + "=>"+e.ppn);
 		for(int i = 0; i < Machine.processor().getTLBSize(); i++){
 			TranslationEntry entry = Machine.processor().readTLBEntry(i);
 			if(entry.ppn == e.ppn){
 				entry.valid = false;
+
 				Machine.processor().writeTLBEntry(i,entry);
 			}
-		}		
+		}
+		// TLBLock.release();
 	}
 	
 	/**
@@ -59,12 +75,13 @@ public class VMProcess extends UserProcess {
 	 * @return <tt>true</tt> if successful.
 	 */
 	protected boolean loadSections() {
-
 		//VMKernel.memoryLock.acquire();
 		pageTable = new TranslationEntry[numPages];
+		this.pageTableLock.acquire();
 		for(int vpn = 0; vpn < numPages; vpn++){
 			pageTable[vpn] = new TranslationEntry();
 		}
+
 		// maps out coff sections
 		for(int s = 0; s < coff.getNumSections(); s++){
 			CoffSection section = coff.getSection(s);
@@ -87,6 +104,7 @@ public class VMProcess extends UserProcess {
 			pageTable[s].vpn = s;
 		}
 		//VMKernel.memoryLock.release();
+		this.pageTableLock.release();
 		return true;
 //		return super.loadSections();
 	}
@@ -96,13 +114,15 @@ public class VMProcess extends UserProcess {
 	 * Release any resources allocated by <tt>loadSections()</tt>.
 	 */
 	protected void unloadSections() {
+		this.pageTableLock.acquire();
 		for(int i = 0; i < pageTable.length; i++){
 			if(pageTable[i].readOnly == false && pageTable[i].valid == false){
 				SwapFile.free(pageTable[i].vpn);	// free swap file space
 			}
 		}
+
 		super.unloadSections();
-		
+		this.pageTableLock.release();
 	}
 
 	/**
@@ -127,15 +147,21 @@ public class VMProcess extends UserProcess {
 	}
 
 	public void handleTLBMiss(int vAddr){
+		System.out.println("Process " + this.processID() + " is handling TLB miss at vAddr " + vAddr);
+		boolean status = Machine.interrupt().disable();
+                TLBLock.acquire();
 		int vpn = Processor.pageFromAddress(vAddr);
-	//	System.out.println("TLB MISS AT PAGE " + vpn);
 		TranslationEntry entry = handleTLE(vpn);
 		
-		int location  = allocateTLBEntry();
+		int location = this.allocateTLBEntry();
 		Machine.processor().writeTLBEntry(location, entry);
+		TLBLock.release();
+		Machine.interrupt().setStatus(status);
+		System.out.println("Process " + this.processID() + " finished handling TLB miss at vpn " + vpn + " at location " + location);
 	}
 
 	public TranslationEntry handleTLE(int vpn){
+		this.pageTableLock.acquire();
 		TranslationEntry entry = pageTable[vpn];
 		//System.out.println("ENTRY HAD A THING OF " + entry.vpn + "=>" + entry.ppn + " AND IT IS " + entry.valid);
 		if(entry.valid == false){
@@ -146,31 +172,36 @@ public class VMProcess extends UserProcess {
 			}
 			entry.vpn = vpn;
 			pageTable[vpn] = entry;
-			pageTable[vpn].valid=true;
+			pageTable[vpn].valid = true;
 		//	System.out.println("HANDLED TLE WITH A " + pageTable[vpn].vpn + "=>" + pageTable[vpn].ppn + " AND IT IS " + pageTable[vpn].valid);
 		}
+		
+		this.pageTableLock.release();
 		return entry;
 	}
 
 
 	private int allocateTLBEntry(){
 		TranslationEntry entry = null;
+		// TLBLock.acquire();
 		for(int i = 0; i < Machine.processor().getTLBSize();i++){
 			entry = Machine.processor().readTLBEntry(i);
 			if(entry.valid == false){
 				return i;
 			}
 		}
-		// ok so all are valid
+
 		int victim = Lib.random(Machine.processor().getTLBSize());
 		entry = Machine.processor().readTLBEntry(victim);
-		syncTLB(entry);
+		this.syncTLBEntry(entry);
+		// TLBLock.release();
 		return victim;
 	}
 
-	private void syncTLB(TranslationEntry entry){
+	public void syncTLBEntry(TranslationEntry entry){
 	//	System.out.println("SYNC TLB for " + entry.vpn + "=>" + entry.ppn + " AND IT IS NOW " + entry.valid);
 		/* Chances are we may have to sync with swap file as well. */
+		// this.pageTableLock.acquire();
 		for(int i = 0; i < pageTable.length; i++){
 			if(pageTable[i].ppn == entry.ppn && pageTable[i].vpn == entry.vpn){
 				//pageTable[i].valid = entry.valid;
@@ -179,12 +210,20 @@ public class VMProcess extends UserProcess {
 				pageTable[i].dirty = entry.dirty;			
 			}
 		}
+
+		// this.pageTableLock.release();
 	//	VMKernel.ownedMemory[entry.ppn].te.dirty = entry.dirty;
 	//	VMKernel.ownedMemory[entry.ppn].te.used = entry.used;
 	}
 
 	protected int pinVirtualPage(int vpn, boolean isUserWrite){
-		handleTLE(vpn);
+		System.out.println("Process " + this.processID() + " is trying to pin vpn " + vpn);
+		//Machine.interrupt().disable();
+		//TLBLock.acquire();
+		this.handleTLE(vpn);
+		//TLBLock.acquire();
+		//Machine.interrupt().enable();
+		System.out.println("Process " + this.processID() + " pinned vpn " + vpn);
 		VMKernel.pinPage(pageTable[vpn].ppn);
 		return super.pinVirtualPage(vpn,isUserWrite);
 	}
@@ -197,7 +236,9 @@ public class VMProcess extends UserProcess {
 		return this.coff;
 	}
 
-	
+	private Lock pageTableLock;
+
+	public static final Lock TLBLock = new Lock();	
 
 	private static final int pageSize = Processor.pageSize;
 

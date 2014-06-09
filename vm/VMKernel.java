@@ -29,6 +29,7 @@ public class VMKernel extends UserKernel {
 		}
 		memoryLock = new Lock();
 		clockLock = new Lock();
+		//VMProcess.TLBLock = new Lock();
 		allPinned = new Condition(memoryLock);	
 		//invertedPageTable = new HashMap<TEKey, ProcessTranslationEntry>();
 	}
@@ -54,9 +55,8 @@ public class VMKernel extends UserKernel {
 		SwapFile.close();
 		super.terminate();
 	}
-
-
 	
+	// Raise page fault.
 	public static TranslationEntry raisePageFault(VMProcess process, TranslationEntry entry, int accessedVpn, boolean isCoff){
 		
 		Coff coff = process.getCoff();
@@ -79,7 +79,10 @@ public class VMKernel extends UserKernel {
 					selectedPhysicalPage.translationEntry.used = false;
 				}else{
 					if(selectedPhysicalPage.process != null){
+						// VMProcess.TLBLock.acquire();
+						selectedPhysicalPage.process.syncTLBEntry(selectedPhysicalPage.translationEntry);
 						selectedPhysicalPage.process.invalidateEntry(selectedPhysicalPage.translationEntry);
+						// VMProcess.TLBLock.release();
 					}
  
 					// If selected page has been modified, write the modified page to disk.
